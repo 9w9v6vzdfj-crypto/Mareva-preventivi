@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MarEva – Preventivi</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F7F8FA;
+  --white:#FFFFFF;
+  --border:#E4E7EC;
+  --text:#111827;
+  --sub:#6B7280;
+  --accent:#2563EB;
+  --accent-lt:#EFF6FF;
+  --green:#16A34A;
+  --green-lt:#F0FDF4;
+  --red:#DC2626;
+  --red-lt:#FEF2F2;
+  --orange:#D97706;
+  --orange-lt:#FFFBEB;
+  --gold:#B8956A;
+  --radius:10px;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:0 4px 12px rgba(0,0,0,.1);
+}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.5;min-height:100vh}
+input,select,textarea,button{font-family:inherit;font-size:15px}
+input,select,textarea{-webkit-appearance:none}
+
+/* ── LAYOUT ── */
+.app{display:flex;flex-direction:column;min-height:100vh}
+
+/* ── TOP NAV ── */
+.topnav{
+  background:var(--white);
+  border-bottom:1px solid var(--border);
+  padding:0 16px;
+  height:56px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;
+}
+.brand{font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.3px}
+.brand span{color:var(--accent)}
+.nav-tabs{display:flex;gap:4px}
+.nav-tab{
+  padding:6px 14px;border-radius:8px;border:none;background:none;
+  font-size:13px;font-weight:500;color:var(--sub);cursor:pointer;
+  transition:all .15s;white-space:nowrap;
+}
+.nav-tab.active{background:var(--accent-lt);color:var(--accent)}
+.nav-tab:hover:not(.active){background:var(--bg)}
+
+/* ── PAGE ── */
+.page{display:none;flex:1;padding:16px;max-width:600px;margin:0 auto;width:100%}
+.page.active{display:block}
+
+/* ── CARDS ── */
+.card{background:var(--white);border-radius:var(--radius);border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:12px;overflow:hidden}
+.card-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px}
+.card-icon{width:28px;height:28px;border-radius:8px;background:var(--accent-lt);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.card-body{padding:16px}
+
+/* ── FORM ── */
+.field{margin-bottom:12px}
+.field:last-child{margin-bottom:0}
+.label{display:block;font-size:12px;font-weight:500;color:var(--sub);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.input,.select,.textarea{
+  width:100%;padding:10px 12px;
+  border:1.5px solid var(--border);border-radius:8px;
+  background:var(--white);color:var(--text);
+  font-size:15px;transition:border .15s;outline:none;
+}
+.input:focus,.select:focus,.textarea:focus{border-color:var(--accent)}
+.textarea{resize:vertical;min-height:80px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+
+/* ── BUTTONS ── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:10px 16px;border-radius:8px;border:none;cursor:pointer;
+  font-size:14px;font-weight:600;transition:all .15s;white-space:nowrap;
+}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#1d4ed8}
+.btn-secondary{background:var(--bg);color:var(--text);border:1.5px solid var(--border)}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+.btn-success{background:var(--green);color:#fff}
+.btn-success:hover{background:#15803d}
+.btn-danger{background:none;border:none;color:var(--red);cursor:pointer;padding:4px;line-height:1;font-size:16px}
+.btn-sm{padding:7px 12px;font-size:13px}
+.btn-full{width:100%}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ── BADGE ── */
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:600}
+.badge-gray{background:#F3F4F6;color:#374151}
+.badge-blue{background:var(--accent-lt);color:var(--accent)}
+.badge-green{background:var(--green-lt);color:var(--green)}
+.badge-red{background:var(--red-lt);color:var(--red)}
+.badge-orange{background:var(--orange-lt);color:var(--orange)}
+
+/* ── STAT CARDS ── */
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.stat{background:var(--white);border-radius:var(--radius);border:1px solid var(--border);padding:14px 16px}
+.stat-val{font-size:24px;font-weight:700;color:var(--text);line-height:1}
+.stat-lbl{font-size:12px;color:var(--sub);margin-top:4px}
+
+/* ── PREVENTIVO LIST ── */
+.prev-item{
+  background:var(--white);border-radius:var(--radius);border:1px solid var(--border);
+  padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:box-shadow .15s;
+}
+.prev-item:hover{box-shadow:var(--shadow-md)}
+.prev-item-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
+.prev-item-name{font-weight:600;font-size:15px}
+.prev-item-num{font-size:12px;color:var(--sub);margin-top:2px}
+.prev-item-bottom{display:flex;align-items:center;justify-content:space-between}
+.prev-item-tot{font-size:16px;font-weight:700;color:var(--accent)}
+.prev-item-info{font-size:12px;color:var(--sub)}
+.empty{text-align:center;padding:40px 20px;color:var(--sub)}
+.empty-icon{font-size:40px;margin-bottom:12px}
+.empty p{font-size:14px}
+
+/* ── NUMERO PREVENTIVO ── */
+.prev-number{
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--accent-lt);border:1.5px solid #BFDBFE;
+  border-radius:8px;padding:6px 12px;
+  font-size:13px;font-weight:700;color:var(--accent);
+  margin-bottom:16px;
+}
+
+/* ── LOCALE CARD ── */
+.locale-card{background:var(--white);border-radius:var(--radius);border:1px solid var(--border);margin-bottom:8px;overflow:hidden}
+.locale-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 14px;cursor:pointer;
+  transition:background .15s;
+}
+.locale-hdr:hover{background:var(--bg)}
+.locale-hdr-l{display:flex;align-items:center;gap:10px}
+.locale-emoji{font-size:20px;width:36px;height:36px;background:var(--bg);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.locale-hdr-name{font-weight:600;font-size:15px}
+.locale-hdr-sub{font-size:12px;color:var(--sub);margin-top:1px}
+.locale-hdr-r{display:flex;align-items:center;gap:8px}
+.locale-hdr-tot{font-weight:700;font-size:14px;color:var(--accent)}
+.locale-arrow{color:var(--sub);font-size:12px;transition:transform .2s}
+.locale-arrow.open{transform:rotate(180deg)}
+.locale-bdy{display:none;padding:14px;border-top:1px solid var(--border);background:var(--bg)}
+.locale-bdy.open{display:block}
+
+/* ── LAV BUTTONS ── */
+.lav-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.lav-btn{
+  padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);
+  background:var(--white);color:var(--text);font-size:13px;font-weight:500;
+  cursor:pointer;text-align:left;transition:all .15s;
+  display:flex;align-items:center;gap:6px;
+}
+.lav-btn:hover{border-color:var(--accent);color:var(--accent)}
+.lav-btn.on{background:var(--accent-lt);border-color:var(--accent);color:var(--accent);font-weight:600}
+
+/* ── SUPERFICIE BADGE ── */
+.sup-badge{
+  background:var(--accent-lt);border-radius:8px;padding:8px 12px;
+  font-size:13px;color:var(--accent);font-weight:600;margin-bottom:10px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+
+/* ── TOTALE BOX ── */
+.totale-box{background:var(--text);border-radius:var(--radius);padding:16px;margin-top:4px}
+.totale-row{display:flex;justify-content:space-between;font-size:14px;color:rgba(255,255,255,.6);padding:3px 0}
+.totale-row.main{font-size:18px;font-weight:700;color:#fff;border-top:1px solid rgba(255,255,255,.15);margin-top:8px;padding-top:10px}
+.totale-row.main span:last-child{color:#60A5FA}
+
+/* ── SUP TOTALE ── */
+.sup-totale{background:var(--green-lt);border:1px solid #BBF7D0;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:none}
+.sup-totale-val{font-size:18px;font-weight:700;color:var(--green)}
+.sup-totale-lbl{font-size:12px;color:#166534}
+
+/* ── SECTION LABEL ── */
+.section-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--sub);margin:16px 0 8px}
+.section-lbl:first-child{margin-top:0}
+
+/* ── DIVIDER ── */
+.divider{height:1px;background:var(--border);margin:14px 0}
+
+/* ── COLOR INPUT ── */
+.color-fields{background:var(--white);border-radius:8px;padding:10px;margin-top:6px;border:1px solid var(--border)}
+.color-lbl{font-size:11px;color:var(--sub);margin-bottom:4px;font-weight:500;text-transform:uppercase;letter-spacing:.3px}
+
+/* ── FOTO ── */
+.foto-zone{
+  border:2px dashed var(--border);border-radius:8px;
+  padding:20px;text-align:center;cursor:pointer;transition:border .15s;
+}
+.foto-zone:hover{border-color:var(--accent)}
+.foto-zone p{font-size:13px;color:var(--sub);margin-top:6px}
+.foto-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.foto-thumb-wrap{position:relative;width:72px;height:72px}
+.foto-thumb{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--border)}
+.foto-del{position:absolute;top:-6px;right:-6px;width:20px;height:20px;background:var(--red);color:#fff;border:none;border-radius:50%;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+
+/* ── STATUS SELECT ── */
+.status-select{border:1.5px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--white);color:var(--text)}
+
+/* ── PRINT ── */
+@media print{
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  body>*{display:none!important}
+  #printFrame{display:block!important;position:static!important}
+}
+#printFrame{display:none}
+
+@media(max-width:420px){
+  .row3{grid-template-columns:1fr 1fr}
+  .lav-grid{grid-template-columns:1fr}
+  .stats{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOP NAV -->
+<nav class="topnav">
+  <div class="brand">Mar<span>Eva</span></div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="goPage('dashboard',this)">Home</button>
+    <button class="nav-tab" onclick="goPage('nuovo',this)">+ Nuovo</button>
+    <button class="nav-tab" onclick="goPage('lista',this)">Archivio</button>
+  </div>
+</nav>
+
+<!-- ═══ DASHBOARD ═══ -->
+<div class="page active" id="page-dashboard">
+  <div class="stats" id="statsGrid">
+    <div class="stat"><div class="stat-val" id="s1">0</div><div class="stat-lbl">Preventivi totali</div></div>
+    <div class="stat"><div class="stat-val" id="s2">0</div><div class="stat-lbl">Accettati</div></div>
+    <div class="stat"><div class="stat-val" id="s3">0</div><div class="stat-lbl">In attesa</div></div>
+    <div class="stat"><div class="stat-val" id="s4" style="font-size:18px">€0</div><div class="stat-lbl">Valore accettati</div></div>
+  </div>
+  <div class="section-lbl">Preventivi recenti</div>
+  <div id="dashList"></div>
+</div>
+
+<!-- ═══ NUOVO PREVENTIVO ═══ -->
+<div class="page" id="page-nuovo">
+
+  <div class="prev-number" id="prevNum">📄 P–2026/001</div>
+
+  <!-- CLIENTE -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">👤</div> Dati cliente</div>
+    </div>
+    <div class="card-body">
+      <div class="row2">
+        <div class="field"><label class="label">Nome *</label><input class="input" id="clNome" placeholder="Mario"></div>
+        <div class="field"><label class="label">Cognome *</label><input class="input" id="clCognome" placeholder="Rossi"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label class="label">Telefono</label><input class="input" id="clTel" type="tel" placeholder="+39 333…"></div>
+        <div class="field"><label class="label">Email</label><input class="input" id="clEmail" type="email" placeholder="…@email.it"></div>
+      </div>
+      <div class="field"><label class="label">Indirizzo cantiere</label><input class="input" id="clIndirizzo" placeholder="Via Roma 1, Milano"></div>
+    </div>
+  </div>
+
+  <!-- LOCALI -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">🏠</div> Locali e lavorazioni</div>
+    </div>
+    <div class="card-body">
+      <!-- Aggiungi -->
+      <div class="row2" style="margin-bottom:10px">
+        <select class="select" id="selLocale">
+          <option value="">Scegli locale…</option>
+          <option>Camera</option><option>Cameretta</option><option>Bagno</option>
+          <option>Antibagno</option><option>Corridoio</option><option>Cucina</option>
+          <option>Sala</option><option>Scala</option>
+        </select>
+        <div style="display:flex;gap:6px">
+          <select class="select" id="selQt" style="width:80px">
+            <option value="1">×1</option><option value="2">×2</option>
+            <option value="3">×3</option><option value="4">×4</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="addLocale()" style="flex:1">+ Aggiungi</button>
+        </div>
+      </div>
+      <div id="localiList"></div>
+      <div class="sup-totale" id="supTotBox">
+        <div class="sup-totale-lbl">Superficie totale stimata</div>
+        <div class="sup-totale-val" id="supTotVal">0 m²</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MANODOPERA -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">🔧</div> Manodopera</div>
+    </div>
+    <div class="card-body">
+      <div class="row3">
+        <div class="field"><label class="label">Ore</label><input class="input" id="mdOre" type="number" min="0" placeholder="0" oninput="ricalcola()"></div>
+        <div class="field"><label class="label">€/ora</label><input class="input" id="mdTariffa" type="number" min="0" placeholder="35" oninput="ricalcola()"></div>
+        <div class="field"><label class="label">Totale</label><input class="input" id="mdTot" readonly style="background:var(--bg);font-weight:700;color:var(--accent)" value="€ 0"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCONTO / IVA -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">💶</div> Sconto e IVA</div>
+    </div>
+    <div class="card-body">
+      <div class="row2">
+        <div class="field"><label class="label">Sconto %</label><input class="input" id="sconto" type="number" min="0" max="100" placeholder="0" oninput="ricalcola()"></div>
+        <div class="field"><label class="label">IVA</label>
+          <select class="select" id="iva" onchange="ricalcola()">
+            <option value="22">22% — standard</option>
+            <option value="10">10% — ristrutturazione</option>
+            <option value="4">4% — ridotta</option>
+            <option value="0">0% — esente</option>
+          </select>
+        </div>
+      </div>
+      <div class="totale-box">
+        <div class="totale-row"><span>Subtotale lavori</span><span id="tLav">€ 0,00</span></div>
+        <div class="totale-row"><span>Manodopera</span><span id="tMdo">€ 0,00</span></div>
+        <div class="totale-row"><span>Sconto</span><span id="tSco">— € 0,00</span></div>
+        <div class="totale-row"><span>IVA</span><span id="tIva">€ 0,00</span></div>
+        <div class="totale-row main"><span>TOTALE</span><span id="tFin">€ 0,00</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTE & FOTO -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">📝</div> Note sopralluogo</div>
+    </div>
+    <div class="card-body">
+      <div class="field"><label class="label">Condizione pareti</label>
+        <select class="select" id="nCond">
+          <option value="">— seleziona —</option>
+          <option>Buono stato</option><option>Piccole imperfezioni</option>
+          <option>Crepe da riparare</option><option>Umidità/muffa</option>
+          <option>Intonaco parziale</option><option>Intonaco completo</option>
+        </select>
+      </div>
+      <div class="field"><label class="label">Note libere</label>
+        <textarea class="textarea" id="nNote" placeholder="Difficoltà di accesso, tempi, dettagli…"></textarea>
+      </div>
+      <div class="field"><label class="label">Validità preventivo</label>
+        <select class="select" id="nVal">
+          <option value="30">30 giorni</option>
+          <option value="60">60 giorni</option>
+          <option value="90">90 giorni</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOTO -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">📷</div> Foto</div>
+    </div>
+    <div class="card-body">
+      <div class="foto-zone" onclick="document.getElementById('fotoInput').click()"
+        ondragover="event.preventDefault()"
+        ondrop="event.preventDefault();handleFoto(event.dataTransfer.files)">
+        <div style="font-size:28px">📸</div>
+        <p>Tocca per aggiungere foto<br><span style="font-size:11px">Max 5 foto</span></p>
+      </div>
+      <input type="file" id="fotoInput" multiple accept="image/*" style="display:none" onchange="handleFoto(this.files)">
+      <div class="foto-grid" id="fotoGrid"></div>
+    </div>
+  </div>
+
+  <!-- AZIONI -->
+  <div class="btn-row" style="margin-bottom:24px">
+    <button class="btn btn-secondary btn-sm" onclick="resetForm()">🗑 Azzera</button>
+    <button class="btn btn-secondary btn-sm" onclick="salvaBozza()">💾 Salva</button>
+    <button class="btn btn-primary btn-sm" onclick="apriAnteprima()">👁 Anteprima</button>
+    <button class="btn btn-success btn-sm" onclick="esportaPDF()">⬇ PDF</button>
+  </div>
+</div>
+
+<!-- ═══ ARCHIVIO ═══ -->
+<div class="page" id="page-lista">
+  <div id="listaContent"></div>
+</div>
+
+</div><!-- /app -->
+
+<!-- MODAL ANTEPRIMA -->
+<div id="modalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;overflow-y:auto;padding:20px">
+  <div style="background:#fff;border-radius:12px;max-width:600px;margin:0 auto;overflow:hidden">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <span style="font-weight:700;font-size:15px">Anteprima preventivo</span>
+      <button onclick="chiudiAnteprima()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--sub)">×</button>
+    </div>
+    <div id="anteprimaContent" style="padding:20px"></div>
+    <div style="padding:14px 16px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-secondary btn-sm" onclick="chiudiAnteprima()">Chiudi</button>
+      <button class="btn btn-success btn-sm" onclick="esportaPDF()">⬇ Scarica PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRINT FRAME -->
+<div id="printFrame"></div>
+
+<script>
+// ══════════════════════════════════
+//  STATE
+// ══════════════════════════════════
+let preventivi = JSON.parse(localStorage.getItem('mv_prev')||'[]');
+let locali = [];
+let locCnt = 0;
+let fotoB64 = [];
+let editId = null;
+
+const LOCALI_EMOJI = {Camera:'🛏',Cameretta:'🛏',Bagno:'🚿',Antibagno:'🪥',Corridoio:'🚪',Cucina:'🍳',Sala:'🛋',Scala:'🪜'};
+const SUP_DEF = {Camera:{lung:4,larg:3.5,h:2.7},Cameretta:{lung:3.5,larg:3,h:2.7},Bagno:{lung:3,larg:2,h:2.7},Antibagno:{lung:2,larg:1.5,h:2.7},Corridoio:{lung:5,larg:1.2,h:2.7},Cucina:{lung:4,larg:3,h:2.7},Sala:{lung:6,larg:4,h:2.7},Scala:{lung:6,larg:1.5,h:3.0}};
+const LAV = [
+  {id:'tutto_bianco',   e:'⬜', n:'Tutto bianco'},
+  {id:'soffitto_b',     e:'🔲', n:'Soffitto bianco'},
+  {id:'pareti_color',   e:'🎨', n:'Pareti colorate'},
+  {id:'testata',        e:'🖼', n:'Parete testata'},
+  {id:'due_colori',     e:'🎭', n:'2 colori'},
+  {id:'stucco',         e:'✨', n:'Stucco veneziano'},
+  {id:'spatolato',      e:'🖌', n:'Spatolato'},
+  {id:'carta_parati',   e:'📋', n:'Carta da parati'},
+  {id:'eff_cemento',    e:'🏗', n:'Effetto cemento'},
+  {id:'risanamento',    e:'💧', n:'Risanamento'},
+];
+
+// ══════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════
+function goPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  if(name==='dashboard') aggStats();
+  if(name==='lista') renderLista();
+  if(name==='nuovo' && !editId) resetForm();
+}
+
+// ══════════════════════════════════
+//  LOCALI
+// ══════════════════════════════════
+function calcoloMq(loc){
+  // Pareti: 2*(lunghezza+larghezza)*altezza  +  Soffitto: lunghezza*larghezza
+  const pareti = 2*(loc.lung+loc.larg)*loc.h;
+  const soffitto = loc.lung*loc.larg;
+  return pareti + soffitto;
+}
+function calcoloTotLoc(loc){
+  return calcoloMq(loc)*loc.qt*(loc.pmq||0)+(loc.extra||0);
+}
+
+function addLocale(){
+  const sel=document.getElementById('selLocale');
+  const qt=parseInt(document.getElementById('selQt').value)||1;
+  const nome=sel.value; if(!nome){sel.focus();return;}
+  const def=SUP_DEF[nome]||{lung:4,larg:3,h:2.7};
+  locali.push({id:locCnt++,nome,qt,lung:def.lung,larg:def.larg,h:def.h,lav:[],colori:{},pmq:0,extra:0});
+  sel.value='';
+  renderLocali(); ricalcola();
+}
+
+function removeLocale(id){
+  locali=locali.filter(l=>l.id!==id);
+  renderLocali(); ricalcola();
+}
+
+function toggleLav(lid, lavId){
+  const loc=locali.find(l=>l.id===lid); if(!loc) return;
+  const i=loc.lav.indexOf(lavId);
+  if(i>=0) loc.lav.splice(i,1); else loc.lav.push(lavId);
+  renderLocaleBody(lid); ricalcola();
+}
+
+function setLocField(lid,field,val){
+  const loc=locali.find(l=>l.id===lid); if(!loc) return;
+  if(['lung','larg','h','pmq','extra'].includes(field)) loc[field]=parseFloat(val)||0;
+  else loc.colori[field]=val;
+  aggSupBadge(lid); ricalcola();
+}
+
+function aggSupBadge(lid){
+  const loc=locali.find(l=>l.id===lid); if(!loc) return;
+  const mq=calcoloMq(loc)*loc.qt;
+  const el=document.getElementById('supb-'+lid);
+  if(el) el.textContent=`~${mq.toFixed(1)} m² totali`;
+  const th=document.getElementById('lhdr-tot-'+lid);
+  if(th) th.textContent='€'+calcoloTotLoc(loc).toFixed(2);
+}
+
+function toggleLocBody(lid){
+  const b=document.getElementById('lbody-'+lid);
+  const a=document.getElementById('larr-'+lid);
+  if(!b)return;
+  b.classList.toggle('open');
+  a.classList.toggle('open');
+}
+
+function renderLocali(){
+  const c=document.getElementById('localiList');
+  if(!locali.length){
+    c.innerHTML='<p style="text-align:center;color:var(--sub);font-size:13px;padding:16px 0">Nessun locale aggiunto.</p>';
+    document.getElementById('supTotBox').style.display='none';
+    return;
+  }
+  c.innerHTML=locali.map(buildLocCard).join('');
+  document.getElementById('supTotBox').style.display='block';
+  aggSupTot();
+}
+
+function renderLocaleBody(lid){
+  const loc=locali.find(l=>l.id===lid); if(!loc) return;
+  const bdy=document.getElementById('lbody-'+lid); if(!bdy) return;
+  const wasOpen=bdy.classList.contains('open');
+  bdy.innerHTML=buildLocBodyHTML(loc);
+  if(wasOpen) bdy.classList.add('open');
+}
+
+function buildLocCard(loc){
+  const e=LOCALI_EMOJI[loc.nome]||'🏠';
+  const lavStr=loc.lav.map(id=>LAV.find(l=>l.id===id)?.n||id).join(', ')||'Nessuna lavorazione';
+  return `<div class="locale-card">
+    <div class="locale-hdr" onclick="toggleLocBody(${loc.id})">
+      <div class="locale-hdr-l">
+        <div class="locale-emoji">${e}</div>
+        <div>
+          <div class="locale-hdr-name">${loc.nome}${loc.qt>1?' ×'+loc.qt:''}</div>
+          <div class="locale-hdr-sub">${lavStr}</div>
+        </div>
+      </div>
+      <div class="locale-hdr-r">
+        <span class="locale-hdr-tot" id="lhdr-tot-${loc.id}">€${calcoloTotLoc(loc).toFixed(2)}</span>
+        <button class="btn-danger" onclick="event.stopPropagation();removeLocale(${loc.id})">✕</button>
+        <span class="locale-arrow" id="larr-${loc.id}">▾</span>
+      </div>
+    </div>
+    <div class="locale-bdy" id="lbody-${loc.id}">${buildLocBodyHTML(loc)}</div>
+  </div>`;
+}
+
+function buildLocBodyHTML(loc){
+  const hasColor=loc.lav.some(id=>['pareti_color','testata','due_colori'].includes(id));
+  const colHTML=hasColor?`<div class="color-fields">
+    <div class="color-lbl">Colori</div>
+    ${loc.lav.includes('testata')||loc.lav.includes('due_colori')?`
+    <div class="field" style="margin-bottom:8px">
+      <label class="label" style="font-size:11px">Parete testata / Colore 1</label>
+      <input class="input" style="font-size:14px" value="${loc.colori.c1||''}" placeholder="es. Grigio tortora"
+        oninput="setLocField(${loc.id},'c1',this.value)">
+    </div>`:''}
+    ${loc.lav.includes('pareti_color')||loc.lav.includes('due_colori')?`
+    <div class="field" style="margin-bottom:8px">
+      <label class="label" style="font-size:11px">${loc.lav.includes('due_colori')?'Colore 2 (resto)':'Colore pareti'}</label>
+      <input class="input" style="font-size:14px" value="${loc.colori.c2||''}" placeholder="es. Bianco perla"
+        oninput="setLocField(${loc.id},'c2',this.value)">
+    </div>`:''}
+    <div class="field" style="margin-bottom:0">
+      <label class="label" style="font-size:11px">Colore soffitto</label>
+      <input class="input" style="font-size:14px" value="${loc.colori.cs||''}" placeholder="Bianco"
+        oninput="setLocField(${loc.id},'cs',this.value)">
+    </div>
+  </div>`:'';
+
+  return `
+    <div class="section-lbl" style="margin-top:0">Misure stanza</div>
+    <div class="row3">
+      <div class="field">
+        <label class="label">Lunghezza (m)</label>
+        <input class="input" type="number" min="0" step="0.1" value="${loc.lung}"
+          oninput="setLocField(${loc.id},'lung',this.value)">
+      </div>
+      <div class="field">
+        <label class="label">Larghezza (m)</label>
+        <input class="input" type="number" min="0" step="0.1" value="${loc.larg}"
+          oninput="setLocField(${loc.id},'larg',this.value)">
+      </div>
+      <div class="field">
+        <label class="label">Altezza (m)</label>
+        <input class="input" type="number" min="0" step="0.1" value="${loc.h}"
+          oninput="setLocField(${loc.id},'h',this.value)">
+      </div>
+    </div>
+    <div class="sup-badge">
+      <span>📐 Da imbiancare (pareti + soffitto)</span>
+      <span id="supb-${loc.id}">~${(calcoloMq(loc)*loc.qt).toFixed(1)} m²</span>
+    </div>
+
+    <div class="section-lbl">Lavorazione</div>
+    <div class="lav-grid">
+      ${LAV.map(lv=>`<button class="lav-btn${loc.lav.includes(lv.id)?' on':''}"
+        onclick="toggleLav(${loc.id},'${lv.id}')">${lv.e} ${lv.n}</button>`).join('')}
+    </div>
+    ${colHTML}
+
+    <div class="section-lbl">Prezzi</div>
+    <div class="row2">
+      <div class="field">
+        <label class="label">€ / m²</label>
+        <input class="input" type="number" min="0" step="0.5" value="${loc.pmq||''}" placeholder="8.00"
+          oninput="setLocField(${loc.id},'pmq',this.value)">
+      </div>
+      <div class="field">
+        <label class="label">Extra / corpo €</label>
+        <input class="input" type="number" min="0" step="1" value="${loc.extra||''}" placeholder="0"
+          oninput="setLocField(${loc.id},'extra',this.value)">
+      </div>
+    </div>`;
+}
+
+function aggSupTot(){
+  const tot=locali.reduce((s,l)=>s+calcoloMq(l)*l.qt,0);
+  document.getElementById('supTotVal').textContent=tot.toFixed(1)+' m²';
+}
+
+// ══════════════════════════════════
+//  CALCOLI
+// ══════════════════════════════════
+function fmt(n){return'€ '+n.toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2})}
+
+function ricalcola(){
+  const subLav=locali.reduce((s,l)=>s+calcoloTotLoc(l),0);
+  const ore=parseFloat(document.getElementById('mdOre').value)||0;
+  const tar=parseFloat(document.getElementById('mdTariffa').value)||0;
+  const mdo=ore*tar;
+  document.getElementById('mdTot').value=fmt(mdo);
+  const sub=subLav+mdo;
+  const sp=parseFloat(document.getElementById('sconto').value)||0;
+  const sv=sub*sp/100;
+  const imp=sub-sv;
+  const ip=parseFloat(document.getElementById('iva').value)||0;
+  const iv=imp*ip/100;
+  const tot=imp+iv;
+  document.getElementById('tLav').textContent=fmt(subLav);
+  document.getElementById('tMdo').textContent=fmt(mdo);
+  document.getElementById('tSco').textContent='— '+fmt(sv);
+  document.getElementById('tIva').textContent=fmt(iv);
+  document.getElementById('tFin').textContent=fmt(tot);
+  aggSupTot();
+}
+
+// ══════════════════════════════════
+//  FORM UTILS
+// ══════════════════════════════════
+function nextNum(){
+  return `📄 P–${new Date().getFullYear()}/${String(preventivi.length+1).padStart(3,'0')}`;
+}
+
+function getDati(){
+  return {
+    id: editId||Date.now(),
+    numero: document.getElementById('prevNum').textContent,
+    data: new Date().toLocaleDateString('it-IT'),
+    dataISO: new Date().toISOString(),
+    stato:'bozza',
+    cliente:{
+      nome:document.getElementById('clNome').value,
+      cognome:document.getElementById('clCognome').value,
+      tel:document.getElementById('clTel').value,
+      email:document.getElementById('clEmail').value,
+      indirizzo:document.getElementById('clIndirizzo').value,
+    },
+    locali:locali.map(l=>({...l,colori:{...l.colori},lav:[...l.lav]})),
+    supTot:locali.reduce((s,l)=>s+calcoloMq(l)*l.qt,0),
+    manodopera:{ore:parseFloat(document.getElementById('mdOre').value)||0,tariffa:parseFloat(document.getElementById('mdTariffa').value)||0},
+    sconto:parseFloat(document.getElementById('sconto').value)||0,
+    iva:parseFloat(document.getElementById('iva').value)||22,
+    note:{cond:document.getElementById('nCond').value,libere:document.getElementById('nNote').value},
+    validita:document.getElementById('nVal').value,
+    totale:parseFloat(document.getElementById('tFin').textContent.replace(/[€\s.,]/g,s=>s===','?'.':''))||0,
+    foto:fotoB64.slice()
+  };
+}
+
+function salvaBozza(){
+  const d=getDati();
+  if(!d.cliente.nome){alert('Inserisci il nome del cliente.');return;}
+  const i=preventivi.findIndex(p=>p.id===d.id);
+  if(i>=0) preventivi[i]=d; else preventivi.push(d);
+  localStorage.setItem('mv_prev',JSON.stringify(preventivi));
+  editId=d.id;
+  const btn=event.target.closest('button');
+  const orig=btn.textContent; btn.textContent='✓ Salvato!';
+  setTimeout(()=>btn.textContent=orig,2000);
+}
+
+function resetForm(){
+  editId=null; locali=[]; locCnt=0; fotoB64=[];
+  ['clNome','clCognome','clTel','clEmail','clIndirizzo','mdOre','mdTariffa','sconto','nNote'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('iva').value='22';
+  document.getElementById('nCond').value='';
+  document.getElementById('nVal').value='30';
+  document.getElementById('fotoGrid').innerHTML='';
+  document.getElementById('prevNum').textContent=nextNum();
+  renderLocali(); ricalcola();
+}
+
+// ══════════════════════════════════
+//  FOTO
+// ══════════════════════════════════
+function handleFoto(files){
+  Array.from(files).slice(0,5-fotoB64.length).forEach(f=>{
+    const r=new FileReader();
+    r.onload=e=>{fotoB64.push(e.target.result);renderFoto();};
+    r.readAsDataURL(f);
+  });
+}
+function renderFoto(){
+  document.getElementById('fotoGrid').innerHTML=fotoB64.map((s,i)=>`
+    <div class="foto-thumb-wrap">
+      <img class="foto-thumb" src="${s}">
+      <button class="foto-del" onclick="fotoB64.splice(${i},1);renderFoto()">✕</button>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════
+//  ANTEPRIMA
+// ══════════════════════════════════
+function apriAnteprima(){
+  const d=getDati();
+  document.getElementById('anteprimaContent').innerHTML=buildAntHTML(d);
+  document.getElementById('modalBg').style.display='block';
+}
+function chiudiAnteprima(){document.getElementById('modalBg').style.display='none';}
+
+function buildLocRighe(locs){
+  return (locs||[]).map(loc=>{
+    const mq=calcoloMq(loc)*loc.qt;
+    const lavN=(loc.lav||[]).map(id=>LAV.find(l=>l.id===id)?.n||id).join(', ')||'—';
+    const col=Object.values(loc.colori||{}).filter(Boolean).join(' / ');
+    const tot=mq*(loc.pmq||0)+(loc.extra||0);
+    return `<tr>
+      <td style="padding:8px;border-bottom:1px solid #E4E7EC">
+        <strong>${loc.nome}${loc.qt>1?' ×'+loc.qt:''}</strong>
+        <div style="font-size:12px;color:#6B7280">${lavN}</div>
+        ${col?`<div style="font-size:11px;color:#B8956A">${col}</div>`:''}
+      </td>
+      <td style="padding:8px;border-bottom:1px solid #E4E7EC;text-align:right">${mq.toFixed(1)} m²</td>
+      <td style="padding:8px;border-bottom:1px solid #E4E7EC;text-align:right">€${(loc.pmq||0).toFixed(2)}</td>
+      <td style="padding:8px;border-bottom:1px solid #E4E7EC;text-align:right;font-weight:700">€${tot.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function buildAntHTML(d){
+  const locs=d.locali||[];
+  const mdo=(d.manodopera?.ore||0)*(d.manodopera?.tariffa||0);
+  const subL=locs.reduce((s,l)=>{const mq=calcoloMq(l)*l.qt;return s+mq*(l.pmq||0)+(l.extra||0);},0);
+  const sub=subL+mdo;
+  const sv=sub*(d.sconto||0)/100;
+  const imp=sub-sv;
+  const iv=imp*(d.iva||22)/100;
+  const tot=imp+iv;
+  const scad=new Date(d.dataISO); scad.setDate(scad.getDate()+parseInt(d.validita||30));
+  const fotoH=(d.foto||[]).slice(0,3).map(s=>`<img src="${s}" style="width:80px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #E4E7EC">`).join('');
+
+  return `<div style="font-family:-apple-system,sans-serif;font-size:14px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:16px;padding-bottom:16px;border-bottom:2px solid #111827">
+      <div>
+        <div style="font-size:22px;font-weight:800">Mar<span style="color:#2563EB">Eva</span></div>
+        <div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.5px">Pittura & Decorazione</div>
+      </div>
+      <div style="text-align:right;font-size:12px;color:#6B7280">
+        <div style="font-weight:700;color:#111827;font-size:14px">${d.numero}</div>
+        <div>${d.data}</div>
+        <div>Scade: ${scad.toLocaleDateString('it-IT')}</div>
+      </div>
+    </div>
+
+    <div style="background:#F7F8FA;border-radius:8px;padding:12px;margin-bottom:14px;border-left:3px solid #2563EB">
+      <div style="font-weight:700">${d.cliente?.nome||''} ${d.cliente?.cognome||''}</div>
+      <div style="font-size:12px;color:#6B7280">${d.cliente?.indirizzo||''}</div>
+      <div style="font-size:12px;color:#6B7280">${[d.cliente?.tel,d.cliente?.email].filter(Boolean).join(' · ')}</div>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6B7280;margin-bottom:6px">Dettaglio lavori</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px">
+      <thead><tr style="background:#111827;color:#fff">
+        <th style="padding:8px;text-align:left;font-size:11px">Locale</th>
+        <th style="padding:8px;text-align:right;font-size:11px">m²</th>
+        <th style="padding:8px;text-align:right;font-size:11px">€/m²</th>
+        <th style="padding:8px;text-align:right;font-size:11px">Totale</th>
+      </tr></thead>
+      <tbody>
+        ${buildLocRighe(locs)}
+        ${mdo>0?`<tr style="background:#F7F8FA"><td colspan="3" style="padding:8px;border-bottom:1px solid #E4E7EC;font-style:italic;color:#6B7280">Manodopera (${d.manodopera.ore}h × €${d.manodopera.tariffa})</td><td style="padding:8px;border-bottom:1px solid #E4E7EC;text-align:right;font-weight:700">€${mdo.toFixed(2)}</td></tr>`:''}
+      </tbody>
+    </table>
+    ${d.supTot>0?`<div style="font-size:12px;color:#6B7280;margin-bottom:14px">Superficie totale: <strong style="color:#111827">${d.supTot.toFixed(1)} m²</strong></div>`:''}
+
+    <div style="background:#111827;border-radius:8px;padding:14px;margin-bottom:14px">
+      ${subL>0?`<div style="display:flex;justify-content:space-between;color:rgba(255,255,255,.6);font-size:13px;padding:3px 0"><span>Subtotale lavori</span><span>€${subL.toFixed(2)}</span></div>`:''}
+      ${mdo>0?`<div style="display:flex;justify-content:space-between;color:rgba(255,255,255,.6);font-size:13px;padding:3px 0"><span>Manodopera</span><span>€${mdo.toFixed(2)}</span></div>`:''}
+      ${d.sconto>0?`<div style="display:flex;justify-content:space-between;color:rgba(255,255,255,.6);font-size:13px;padding:3px 0"><span>Sconto ${d.sconto}%</span><span>— €${sv.toFixed(2)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;color:rgba(255,255,255,.6);font-size:13px;padding:3px 0"><span>IVA ${d.iva}%</span><span>€${iv.toFixed(2)}</span></div>
+      <div style="display:flex;justify-content:space-between;color:#fff;font-size:17px;font-weight:700;border-top:1px solid rgba(255,255,255,.2);margin-top:8px;padding-top:10px"><span>TOTALE</span><span style="color:#60A5FA">€${tot.toFixed(2)}</span></div>
+    </div>
+
+    ${d.note?.libere?`<div style="background:#F7F8FA;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px;color:#374151"><strong style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#6B7280">Note</strong><br>${d.note.libere}</div>`:''}
+    ${fotoH?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${fotoH}</div>`:''}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px">
+      <div style="border-top:1px solid #111827;padding-top:6px;font-size:11px;color:#6B7280;text-align:center">Firma cliente</div>
+      <div style="border-top:1px solid #111827;padding-top:6px;font-size:11px;color:#6B7280;text-align:center">Firma MarEva</div>
+    </div>
+    <div style="margin-top:16px;padding-top:10px;border-top:1px solid #E4E7EC;display:flex;justify-content:space-between;font-size:11px;color:#9CA3AF">
+      <span>MarEva – P.IVA 00000000000</span><span>${d.numero} · ${d.data}</span>
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════════
+//  PDF — apre in nuova finestra
+// ══════════════════════════════════
+function esportaPDF(){
+  const d=getDati();
+  const contenuto=buildDocHTML(d);
+  const w=window.open('','_blank');
+  if(w){ w.document.write(contenuto); w.document.close(); }
+  else { alert('Permetti i popup per aprire il preventivo, oppure usa il tasto Anteprima e stampa da lì.'); }
+}
+
+function buildDocHTML(d){
+  return `<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Preventivo MarEva – ${d.cliente?.nome||''} ${d.cliente?.cognome||''}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,Arial,sans-serif;font-size:14px;color:#111827;background:#fff;padding:15mm 18mm}
+  @media print{body{padding:10mm 14mm}}
+  @media(max-width:600px){body{padding:16px}}
+  table{width:100%;border-collapse:collapse}
+  .btn-print{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;background:#2563EB;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:20px}
+  .btn-print:hover{background:#1d4ed8}
+  @media print{.btn-print,.no-print{display:none!important}}
+</style>
+</head>
+<body>
+<button class="btn-print no-print" onclick="window.print()">🖨 Stampa / Salva PDF</button>
+${buildAntHTML(d)}
+</body></html>`;
+}
+
+// ══════════════════════════════════
+//  STATS & LISTS
+// ══════════════════════════════════
+function aggStats(){
+  const tot=preventivi.length;
+  const acc=preventivi.filter(p=>p.stato==='accettato').length;
+  const att=preventivi.filter(p=>['bozza','inviato'].includes(p.stato)).length;
+  const val=preventivi.filter(p=>p.stato==='accettato').reduce((s,p)=>s+(p.totale||0),0);
+  document.getElementById('s1').textContent=tot;
+  document.getElementById('s2').textContent=acc;
+  document.getElementById('s3').textContent=att;
+  document.getElementById('s4').textContent='€'+val.toLocaleString('it-IT',{maximumFractionDigits:0});
+
+  const dl=document.getElementById('dashList');
+  if(!preventivi.length){
+    dl.innerHTML=`<div class="empty"><div class="empty-icon">📋</div><p>Nessun preventivo ancora.<br>Creane uno!</p></div>`;
+    return;
+  }
+  const rec=[...preventivi].sort((a,b)=>b.id-a.id).slice(0,5);
+  dl.innerHTML=rec.map(p=>prevItemHTML(p,true)).join('');
+}
+
+function renderLista(){
+  const c=document.getElementById('listaContent');
+  if(!preventivi.length){
+    c.innerHTML=`<div class="empty"><div class="empty-icon">📋</div><p>Nessun preventivo salvato.</p></div>`;
+    return;
+  }
+  const sorted=[...preventivi].sort((a,b)=>b.id-a.id);
+  c.innerHTML=sorted.map(p=>prevItemHTML(p,false)).join('');
+}
+
+function prevItemHTML(p,compact){
+  const statoColors={bozza:'badge-gray',inviato:'badge-blue',accettato:'badge-green',rifiutato:'badge-red'};
+  const azioni=compact?'':`<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+    <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();apriPrev('${p.id}')">✏️ Modifica</button>
+    <button class="btn btn-success btn-sm" onclick="event.stopPropagation();pdfById('${p.id}')">⬇ PDF</button>
+    <select class="status-select" onclick="event.stopPropagation()" onchange="cambiaStato('${p.id}',this.value)">
+      <option value="bozza" ${p.stato==='bozza'?'selected':''}>Bozza</option>
+      <option value="inviato" ${p.stato==='inviato'?'selected':''}>Inviato</option>
+      <option value="accettato" ${p.stato==='accettato'?'selected':''}>Accettato</option>
+      <option value="rifiutato" ${p.stato==='rifiutato'?'selected':''}>Rifiutato</option>
+    </select>
+    <button class="btn btn-sm" style="background:var(--red-lt);color:var(--red);border:none" onclick="event.stopPropagation();elimina('${p.id}')">✕</button>
+  </div>`;
+  return `<div class="prev-item" onclick="${compact?`apriPrev('${p.id}')`:''}">
+    <div class="prev-item-top">
+      <div>
+        <div class="prev-item-name">${p.cliente?.nome||''} ${p.cliente?.cognome||''}</div>
+        <div class="prev-item-num">${p.numero} · ${p.data}</div>
+      </div>
+      <span class="badge ${statoColors[p.stato]||'badge-gray'}">${p.stato||'bozza'}</span>
+    </div>
+    <div class="prev-item-bottom">
+      <span class="prev-item-tot">€${(p.totale||0).toLocaleString('it-IT',{minimumFractionDigits:2})}</span>
+      <span class="prev-item-info">${p.cliente?.indirizzo||''}</span>
+    </div>
+    ${azioni}
+  </div>`;
+}
+
+function cambiaStato(id,stato){
+  const p=preventivi.find(p=>String(p.id)===String(id));
+  if(p){p.stato=stato;localStorage.setItem('mv_prev',JSON.stringify(preventivi));aggStats();}
+}
+
+function elimina(id){
+  if(!confirm('Eliminare questo preventivo?'))return;
+  preventivi=preventivi.filter(p=>String(p.id)!==String(id));
+  localStorage.setItem('mv_prev',JSON.stringify(preventivi));
+  renderLista();
+}
+
+function apriPrev(id){
+  const p=preventivi.find(p=>String(p.id)===String(id)); if(!p)return;
+  editId=p.id;
+  goPage('nuovo',document.querySelectorAll('.nav-tab')[1]);
+  document.getElementById('prevNum').textContent=p.numero;
+  document.getElementById('clNome').value=p.cliente?.nome||'';
+  document.getElementById('clCognome').value=p.cliente?.cognome||'';
+  document.getElementById('clTel').value=p.cliente?.tel||'';
+  document.getElementById('clEmail').value=p.cliente?.email||'';
+  document.getElementById('clIndirizzo').value=p.cliente?.indirizzo||'';
+  locali=(p.locali||[]).map(l=>({...l,colori:{...l.colori},lav:[...l.lav]}));
+  locCnt=locali.length?Math.max(...locali.map(l=>l.id))+1:0;
+  renderLocali();
+  document.getElementById('mdOre').value=p.manodopera?.ore||'';
+  document.getElementById('mdTariffa').value=p.manodopera?.tariffa||'';
+  document.getElementById('sconto').value=p.sconto||'';
+  document.getElementById('iva').value=p.iva||22;
+  document.getElementById('nCond').value=p.note?.cond||'';
+  document.getElementById('nNote').value=p.note?.libere||'';
+  document.getElementById('nVal').value=p.validita||30;
+  fotoB64=p.foto||[];
+  renderFoto(); ricalcola();
+}
+
+function pdfById(id){
+  apriPrev(id);
+  setTimeout(esportaPDF,300);
+}
+
+// ── INIT ──
+document.addEventListener('DOMContentLoaded',()=>{resetForm();aggStats();});
+</script>
+</body>
+</html>
