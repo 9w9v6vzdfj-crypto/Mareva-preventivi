@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Facile Preventivo</title>
+<meta name="description" content="App per sopralluoghi e preventivi per imbianchini e muratori">
+<meta name="theme-color" content="#2563EB">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Facile Preventivo">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- ═══ SCHERMATA DI ACCESSO (cancello: l'app sta sotto, coperta finché non entri) ═══ -->
+<div id="authGate">
+  <div class="auth-box">
+    <div class="auth-brand">Facile<span>Preventivo</span></div>
+    <div class="auth-sub">Accedi o crea il tuo account</div>
+
+    <div class="field"><label class="label">Email</label>
+      <input class="input" id="authEmail" type="email" autocomplete="email" inputmode="email" placeholder="tua@email.it"></div>
+    <div class="field"><label class="label">Password</label>
+      <input class="input" id="authPw" type="password" autocomplete="current-password" placeholder="almeno 6 caratteri"></div>
+
+    <div id="authError" class="auth-error"></div>
+
+    <button class="btn btn-primary btn-full" id="btnAccedi" onclick="accedi()">Accedi</button>
+    <button class="btn btn-secondary btn-full" id="btnCrea" onclick="creaAccount()" style="margin-top:8px">Crea un nuovo account</button>
+
+    <div class="auth-or">oppure</div>
+    <button class="btn btn-secondary btn-full" id="btnGoogle" onclick="accediGoogle()">Accedi con Google</button>
+
+    <div class="auth-busy" id="authBusy" style="display:none">Attendere…</div>
+  </div>
+</div>
+
+<div class="app">
+
+<!-- HEADER -->
+<nav class="topnav">
+  <div class="brand">Facile<span>Preventivo</span></div>
+  <div style="font-size:12px;color:var(--sub)" id="pageTitle">Home</div>
+</nav>
+
+<!-- ═══ DASHBOARD ═══ -->
+<div class="page active" id="page-dashboard">
+
+  <!-- SELETTORE MESTIERE (generato da MESTIERI) -->
+  <div class="section-lbl" style="margin-top:0">Tipo attività</div>
+  <div class="mestiere-row" id="mestiereRow"></div>
+
+  <div class="stats" id="statsGrid">
+    <div class="stat"><div class="stat-val" id="s1">0</div><div class="stat-lbl">Preventivi totali</div></div>
+    <div class="stat"><div class="stat-val" id="s2">0</div><div class="stat-lbl">Accettati</div></div>
+    <div class="stat"><div class="stat-val" id="s3">0</div><div class="stat-lbl">In attesa</div></div>
+    <div class="stat"><div class="stat-val" id="s5">0</div><div class="stat-lbl">Rifiutati</div></div>
+    <div class="stat"><div class="stat-val" id="s4" style="font-size:18px">€0</div><div class="stat-lbl">Valore accettati</div></div>
+  </div>
+
+  <!-- SOPRALLUOGHI IN ATTESA -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div class="section-lbl" style="margin:0">Sopralluoghi da preventivare</div>
+    <button class="btn btn-primary btn-sm" onclick="sEditId=null;goPage('sopralluogo')">+ Nuovo</button>
+  </div>
+  <div id="sopList" style="margin-bottom:16px"></div>
+
+  <div class="section-lbl">Preventivi recenti</div>
+  <div id="dashList"></div>
+</div>
+
+<!-- ═══ SOPRALLUOGO ═══ -->
+<div class="page" id="page-sopralluogo">
+
+  <div class="prev-number" id="sopNum">📋 S–2026/001</div>
+
+  <!-- CLIENTE -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">👤</div> Dati cliente</div>
+    </div>
+    <div class="card-body">
+      <div class="row2">
+        <div class="field"><label class="label">Nome *</label><input class="input" id="sNome" placeholder="Mario"></div>
+        <div class="field"><label class="label">Cognome *</label><input class="input" id="sCognome" placeholder="Rossi"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label class="label">Telefono</label><input class="input" id="sTel" type="tel" placeholder="+39 333…"></div>
+        <div class="field"><label class="label">Email</label><input class="input" id="sEmail" type="email" placeholder="…@email.it"></div>
+      </div>
+      <div class="field"><label class="label">Indirizzo cantiere</label><input class="input" id="sIndirizzo" placeholder="Via Roma 1, Milano"></div>
+    </div>
+  </div>
+
+  <!-- TIPOLOGIA STRUTTURA -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">🏢</div> Tipologia struttura</div>
+    </div>
+    <div class="card-body">
+      <div class="collapse" id="sTipoCollapse">
+        <div class="collapse-hdr" onclick="toggleCollapse('sTipoCollapse')">
+          <span id="sTipoLabel">Appartamento</span>
+          <span class="locale-arrow">▾</span>
+        </div>
+        <div class="collapse-bdy">
+          <div class="check-list" id="sTipoList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AMBIENTI -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">🏠</div> Ambienti e lavorazioni</div>
+    </div>
+    <div class="card-body">
+      <div class="row2" style="margin-bottom:10px">
+        <input class="input" id="sNuovoLocale" placeholder="Nome locale (es. Camera, Bagno…)">
+        <button class="btn btn-primary btn-sm" onclick="sAddLocale()">+ Aggiungi locale</button>
+      </div>
+      <div id="sLocaliList"></div>
+      <div class="sup-totale" id="sSupTotBox">
+        <div class="sup-totale-lbl">Superficie totale rilevata</div>
+        <div class="sup-totale-val" id="sSupTotVal">0 m²</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONDIZIONI GENERALI (se non per-locale) -->
+  <div class="card" id="sCondGenCard">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">🔍</div> <span id="sCondTitle">Stato / condizioni</span></div>
+    </div>
+    <div class="card-body">
+      <div class="collapse" id="sCondCollapse">
+        <div class="collapse-hdr" onclick="toggleCollapse('sCondCollapse')">
+          <span>Condizioni rilevate</span>
+          <span class="locale-arrow">▾</span>
+        </div>
+        <div class="collapse-bdy">
+          <div class="check-list" id="sCondList"></div>
+        </div>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label class="label">Note sullo stato</label>
+        <textarea class="textarea" id="sCondNote" placeholder="Eventuali dettagli su crepe, umidità, ecc." rows="2"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTE GENERALI -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">📝</div> Note generali</div>
+    </div>
+    <div class="card-body">
+      <div class="field">
+        <textarea class="textarea" id="sNote" placeholder="Accessibilità, difficoltà, richieste del cliente, materiali graditi… (opzionale)" rows="3"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- AZIONI -->
+  <div class="btn-row" style="margin-bottom:24px">
+    <button class="btn btn-secondary btn-sm" onclick="sResetForm()">🗑 Azzera</button>
+    <button class="btn btn-secondary btn-sm" onclick="sSalva(event)">💾 Salva</button>
+    <button class="btn btn-secondary btn-sm" onclick="sEsportaPDF()">⬇ PDF sopralluogo</button>
+    <button class="btn btn-primary btn-sm" style="flex:1" onclick="sConvertiInPreventivo()">💶 Vai al preventivo</button>
+  </div>
+</div>
+
+<!-- ═══ PREVENTIVO ═══ -->
+<div class="page" id="page-nuovo">
+
+  <div class="prev-number" id="prevNum">📄 P–2026/001</div>
+
+  <!-- CLIENTE -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">👤</div> Dati cliente</div>
+    </div>
+    <div class="card-body">
+      <div class="row2">
+        <div class="field"><label class="label">Nome *</label><input class="input" id="clNome" placeholder="Mario" oninput="autoSalva()"></div>
+        <div class="field"><label class="label">Cognome *</label><input class="input" id="clCognome" placeholder="Rossi" oninput="autoSalva()"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label class="label">Telefono</label><input class="input" id="clTel" type="tel" placeholder="+39 333…" oninput="autoSalva()"></div>
+        <div class="field"><label class="label">Email</label><input class="input" id="clEmail" type="email" placeholder="…@email.it" oninput="autoSalva()"></div>
+      </div>
+      <div class="field"><label class="label">Indirizzo cantiere</label><input class="input" id="clIndirizzo" placeholder="Via Roma 1, Milano" oninput="autoSalva()"></div>
+    </div>
+  </div>
+
+  <!-- TIPOLOGIA STRUTTURA -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">🏢</div> Tipologia struttura</div>
+    </div>
+    <div class="card-body">
+      <div class="collapse" id="pTipoCollapse">
+        <div class="collapse-hdr" onclick="toggleCollapse('pTipoCollapse')">
+          <span id="pTipoLabel">Appartamento</span>
+          <span class="locale-arrow">▾</span>
+        </div>
+        <div class="collapse-bdy">
+          <div class="check-list" id="pTipoList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IMPOSTAZIONI PREVENTIVO -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">⚙️</div> Impostazioni</div>
+    </div>
+    <div class="card-body">
+      <div class="toggle-row">
+        <span class="label">Manodopera per singolo locale</span>
+        <label class="switch"><input type="checkbox" id="optMdoPerLocale" onchange="onOptMdoChange()"><span class="slider"></span></label>
+      </div>
+      <div class="divider" id="optCondDivider"></div>
+      <div class="toggle-row" id="optCondRow">
+        <span class="label" id="optCondLabel">Condizioni / stato per singolo locale</span>
+        <label class="switch"><input type="checkbox" id="optCondPerLocale" onchange="onOptCondChange()"><span class="slider"></span></label>
+      </div>
+    </div>
+  </div>
+
+  <!-- AMBIENTI -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">🏠</div> Ambienti e lavorazioni</div>
+    </div>
+    <div class="card-body">
+      <div class="row2" style="margin-bottom:10px">
+        <input class="input" id="pNuovoLocale" placeholder="Nome locale (es. Camera, Bagno…)">
+        <button class="btn btn-primary btn-sm" onclick="pAddLocale()">+ Aggiungi locale</button>
+      </div>
+      <div id="pLocaliList"></div>
+      <div class="sup-totale" id="pSupTotBox">
+        <div class="sup-totale-lbl">Superficie totale</div>
+        <div class="sup-totale-val" id="pSupTotVal">0 m²</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONDIZIONI GENERALI -->
+  <div class="card" id="pCondGenCard">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">🔍</div> <span id="pCondTitle">Stato / condizioni</span></div>
+    </div>
+    <div class="card-body">
+      <div class="collapse" id="pCondCollapse">
+        <div class="collapse-hdr" onclick="toggleCollapse('pCondCollapse')">
+          <span>Condizioni rilevate</span>
+          <span class="locale-arrow">▾</span>
+        </div>
+        <div class="collapse-bdy">
+          <div class="check-list" id="pCondList"></div>
+        </div>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label class="label">Note sullo stato</label>
+        <textarea class="textarea" id="pCondNote" placeholder="Eventuali dettagli su crepe, umidità, ecc." rows="2"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- MANODOPERA GENERALE -->
+  <div class="card" id="pMdoGenCard">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">🔧</div> Manodopera</div>
+    </div>
+    <div class="card-body">
+      <div class="field">
+        <label class="label">Prezzo manodopera (€)</label>
+        <input class="input" id="mdoGenerale" type="number" inputmode="decimal" min="0" step="1" placeholder="0" oninput="ricalcola()">
+      </div>
+    </div>
+  </div>
+
+  <!-- SCONTO / IVA -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">💶</div> Sconto e IVA</div>
+    </div>
+    <div class="card-body">
+      <div class="row2">
+        <div class="field"><label class="label">Sconto %</label><input class="input" id="sconto" type="number" inputmode="decimal" min="0" max="100" placeholder="0" oninput="ricalcola()"></div>
+        <div class="field"><label class="label">IVA</label>
+          <select class="select" id="iva" onchange="ricalcola()">
+            <option value="22">22% — standard</option>
+            <option value="10">10% — ristrutturazione</option>
+            <option value="4">4% — ridotta</option>
+            <option value="0">0% — esente</option>
+          </select>
+        </div>
+      </div>
+      <div class="totale-box">
+        <div class="totale-row"><span>Subtotale lavori</span><span id="tLav">€ 0,00</span></div>
+        <div class="totale-row"><span>Manodopera</span><span id="tMdo">€ 0,00</span></div>
+        <div class="totale-row"><span>Sconto</span><span id="tSco">— € 0,00</span></div>
+        <div class="totale-row"><span>IVA</span><span id="tIva">€ 0,00</span></div>
+        <div class="totale-row main"><span>TOTALE</span><span id="tFin">€ 0,00</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTE & VALIDITA -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">📝</div> Note e validità</div>
+    </div>
+    <div class="card-body">
+      <div class="field"><label class="label">Note libere</label>
+        <textarea class="textarea" id="nNote" placeholder="Difficoltà di accesso, tempi, dettagli…" oninput="autoSalva()"></textarea>
+      </div>
+      <div class="field"><label class="label">Validità preventivo</label>
+        <select class="select" id="nVal" onchange="autoSalva()">
+          <option value="30">30 giorni</option>
+          <option value="60">60 giorni</option>
+          <option value="90">90 giorni</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- AZIONI -->
+  <div class="btn-row" style="margin-bottom:24px">
+    <button class="btn btn-secondary btn-sm" onclick="resetForm()">🗑 Azzera</button>
+    <button class="btn btn-secondary btn-sm" onclick="salvaBozza(event)">💾 Salva</button>
+    <button class="btn btn-primary btn-sm" onclick="apriAnteprima()">👁 Anteprima</button>
+    <button class="btn btn-success btn-sm" onclick="esportaPDF()">⬇ PDF</button>
+  </div>
+</div>
+
+<!-- ═══ ARCHIVIO ═══ -->
+<div class="page" id="page-lista">
+  <div id="listaContent"></div>
+</div>
+
+<!-- ═══ IMPOSTAZIONI ═══ -->
+<div class="page" id="page-impostazioni">
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">👤</div> Account</div>
+    </div>
+    <div class="card-body">
+      <p style="font-size:13px;color:var(--sub);margin-bottom:10px">Accesso effettuato come <strong id="accountEmail">—</strong></p>
+      <button class="btn btn-secondary btn-full" onclick="esci()">Esci dall'account</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">🏢</div> Dati impresa</div>
+    </div>
+    <div class="card-body">
+      <div class="field"><label class="label">Nome impresa *</label>
+        <input class="input" id="impNome" placeholder="Es. Rossi Imbianchini" oninput="salvaImpresa()"></div>
+      <div class="field"><label class="label">P.IVA / C.F.</label>
+        <input class="input" id="impPiva" placeholder="IT00000000000" oninput="salvaImpresa()"></div>
+      <div class="row2">
+        <div class="field"><label class="label">Telefono</label>
+          <input class="input" id="impTel" type="tel" placeholder="+39 333…" oninput="salvaImpresa()"></div>
+        <div class="field"><label class="label">Email</label>
+          <input class="input" id="impEmail" type="email" placeholder="info@…" oninput="salvaImpresa()"></div>
+      </div>
+      <div class="field"><label class="label">Indirizzo</label>
+        <input class="input" id="impIndirizzo" placeholder="Via Roma 1, Milano" oninput="salvaImpresa()"></div>
+      <div class="field"><label class="label">Sito web (opzionale)</label>
+        <input class="input" id="impSito" placeholder="www.esempio.it" oninput="salvaImpresa()"></div>
+      <div id="impSavedMsg" style="text-align:center;font-size:13px;color:var(--green);font-weight:600;min-height:20px;margin-top:4px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">📄</div> Anteprima intestazione PDF</div>
+    </div>
+    <div class="card-body">
+      <div id="impPreview" style="border:1.5px solid var(--border);border-radius:8px;padding:14px;font-size:13px">
+        <div style="font-size:18px;font-weight:800;color:var(--text)">Facile Preventivo</div>
+        <div style="font-size:11px;color:var(--sub);margin-top:2px">Inserisci i dati impresa per personalizzare il PDF</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">💾</div> Backup dati</div>
+    </div>
+    <div class="card-body">
+      <p style="font-size:13px;color:var(--sub);margin-bottom:10px">Esporta tutti i preventivi e sopralluoghi in un file, o ripristinali da un backup precedente.</p>
+      <div class="btn-row">
+        <button class="btn btn-secondary btn-sm" onclick="esportaBackup()">⬇ Esporta backup</button>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('backupInput').click()">⬆ Ripristina backup</button>
+        <input type="file" id="backupInput" accept="application/json,.json" style="display:none" onchange="importaBackup(this.files[0])">
+      </div>
+      <div id="backupMsg" style="text-align:center;font-size:13px;font-weight:600;min-height:20px;margin-top:8px"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- BOTTOM TAB BAR -->
+<nav class="bottomnav">
+  <button class="tab-item active" id="tab-dashboard" onclick="goPage('dashboard')">
+    <span class="tab-icon">🏠</span>
+    <span class="tab-label">Home</span>
+  </button>
+  <button class="tab-item" id="tab-sopralluogo" onclick="goPage('sopralluogo')">
+    <span class="tab-icon">📋</span>
+    <span class="tab-label">Sopralluogo</span>
+  </button>
+  <button class="tab-item" id="tab-nuovo" onclick="goPage('nuovo')">
+    <span class="tab-icon">💶</span>
+    <span class="tab-label">Preventivo</span>
+  </button>
+  <button class="tab-item" id="tab-lista" onclick="goPage('lista')">
+    <span class="tab-icon">📁</span>
+    <span class="tab-label">Archivio</span>
+  </button>
+  <button class="tab-item" id="tab-impostazioni" onclick="goPage('impostazioni')">
+    <span class="tab-icon">⚙️</span>
+    <span class="tab-label">Impresa</span>
+  </button>
+</nav>
+
+</div><!-- /app -->
+
+<!-- MODAL PDF FULLSCREEN (preventivo + sopralluogo) -->
+<div id="pdfModal" style="display:none;position:fixed;inset:0;z-index:300;background:#fff;overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <!-- Header FISSO in cima -->
+  <div id="pdfModalBar" style="position:fixed;top:0;left:0;right:0;z-index:310;background:#fff;border-bottom:2px solid #2563EB;padding:max(10px,env(safe-area-inset-top)) 14px 10px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.12)">
+    <button onclick="chiudiPdfModal()" aria-label="Chiudi e torna all'app" title="Chiudi e torna all'app" style="display:flex;align-items:center;gap:6px;height:44px;padding:0 14px 0 12px;border-radius:22px;background:#111827;color:#fff;border:none;font-size:15px;font-weight:600;cursor:pointer;flex-shrink:0;-webkit-tap-highlight-color:transparent"><span style="font-size:20px;line-height:1">✕</span><span>Chiudi</span></button>
+    <span style="font-weight:600;font-size:14px;color:#111827;text-align:center;flex:1;margin:0 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="pdfModalTitolo">Preventivo</span>
+    <button onclick="stampaPDF()" style="display:inline-flex;align-items:center;gap:5px;padding:8px 12px;background:#16A34A;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0;-webkit-tap-highlight-color:transparent">🖨 Stampa</button>
+  </div>
+  <!-- Contenuto documento — padding-top per non nascondersi sotto la barra fissa -->
+  <div id="pdfModalContent" style="padding:calc(72px + env(safe-area-inset-top)) 16px 16px;max-width:680px;margin:0 auto;font-family:-apple-system,Arial,sans-serif;font-size:16px;line-height:1.5;color:#111827"></div>
+  <!-- Chiusura in fondo (non viene stampata) -->
+  <div id="pdfCloseBar" style="max-width:680px;margin:0 auto;padding:8px 16px calc(28px + env(safe-area-inset-bottom))">
+    <button onclick="chiudiPdfModal()" style="width:100%;height:48px;border-radius:10px;background:#111827;color:#fff;border:none;font-size:15px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent">✕ Chiudi e torna all'app</button>
+  </div>
+</div>
+
+<!-- MODAL ANTEPRIMA (solo per preview rapida dentro app) -->
+<div id="modalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;overflow-y:auto;padding:20px">
+  <div style="background:#fff;border-radius:12px;max-width:600px;margin:0 auto;overflow:hidden">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <span style="font-weight:700;font-size:15px">Anteprima preventivo</span>
+      <button onclick="chiudiAnteprima()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--sub)">×</button>
+    </div>
+    <div id="anteprimaContent" style="padding:20px"></div>
+    <div style="padding:14px 16px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-secondary btn-sm" onclick="chiudiAnteprima()">Chiudi</button>
+      <button class="btn btn-success btn-sm" onclick="apriPdfPreventivo()">⬇ Apri PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRINT FRAME -->
+<div id="printFrame"></div>
+
+<!-- Firebase Auth (SDK "compat" da CDN — nessun build step, va su GitHub Pages) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
