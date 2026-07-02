@@ -120,6 +120,17 @@
     </div>
   </div>
 
+  <!-- LAVORI DI ALTRI MESTIERI (moduli — visibile solo per i mestieri che li prevedono) -->
+  <div class="card" id="sModuliCard" style="display:none">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">🧩</div> Lavori di altri mestieri</div>
+    </div>
+    <div class="card-body">
+      <p style="font-size:13px;color:var(--sub);margin-bottom:8px">Attiva i mestieri che rientrano in questo lavoro: le loro voci compaiono negli elenchi dei locali.</p>
+      <div id="sModuliList"></div>
+    </div>
+  </div>
+
   <!-- AMBIENTI -->
   <div class="card">
     <div class="card-header">
@@ -237,6 +248,17 @@
         <span class="label" id="optCondLabel">Condizioni / stato per singolo locale</span>
         <label class="switch"><input type="checkbox" id="optCondPerLocale" onchange="onOptCondChange()"><span class="slider"></span></label>
       </div>
+    </div>
+  </div>
+
+  <!-- LAVORI DI ALTRI MESTIERI (moduli — visibile solo per i mestieri che li prevedono) -->
+  <div class="card" id="pModuliCard" style="display:none">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">🧩</div> Lavori di altri mestieri</div>
+    </div>
+    <div class="card-body">
+      <p style="font-size:13px;color:var(--sub);margin-bottom:8px">Attiva i mestieri che rientrano in questo lavoro: le loro voci compaiono negli elenchi dei locali e nel PDF con il riepilogo per categoria.</p>
+      <div id="pModuliList"></div>
     </div>
   </div>
 

@@ -150,5 +150,37 @@ try {
   check('Serramentista: totale, disegno SVG e PDF', ok, `somma=${somma}`);
 } catch (e) { check('Serramentista: totale, disegno SVG e PDF', false, e.message); }
 
+// 7) Moduli: muratore con voci elettrico (qta × prezzo) e serramenti.
+//    Totale corretto e PDF con riepilogo per categoria.
+try {
+  const sb = loadApp({ mv_mestiere: 'muratore' });
+  boot(sb);
+  const loc = {
+    id: 0, nome: 'Bagno',
+    lavori: ['Massetto / sottofondo', 'Punto luce'],
+    lavoriPrezzi: { 'Massetto / sottofondo': 500, 'Punto luce': 30 },
+    lavoriQta: { 'Punto luce': 4 },
+    lavoriCat: { 'Punto luce': 'elettricista' },
+    serramenti: [{ id: 0, tipo: 'finestra', lung: 600, alt: 600, ante: 1, aperture: ['vasistas'], qta: 1, prezzo: 400, note: '' }],
+    lung: 2.5, larg: 2, h: 2.7, condizioni: [], condNote: '', materiali: '',
+  };
+  // 500 (massetto) + 4×30 (punti luce) + 400 (finestra) = 1020
+  const somma = sb.sommaLavoriLoc(loc, 'muratore');
+  sb.mestiere = 'muratore';
+  const d = {
+    id: 1, numero: '📄 P–2026/002', data: '10/03/2026', dataISO: '2026-03-10T09:00:00.000Z', stato: 'bozza',
+    mestiere: 'muratore', tipoStruttura: 'Appartamento', moduli: ['elettricista', 'serramentista'],
+    cliente: { nome: 'Mario', cognome: 'Rossi' }, locali: [loc], supTot: 5,
+    optMdoPerLocale: false, optCondPerLocale: false, mdoGenerale: 0, sconto: 0, iva: 22,
+    condizioniGen: [], condNoteGen: '', note: { libere: '' }, validita: '30', totale: 0,
+  };
+  const html = sb.buildAntHTML(d);
+  const ok = Math.abs(somma - 1020) < 1e-9
+    && html.includes('Riepilogo per categoria')
+    && html.includes('Opere murarie') && html.includes('Impianto elettrico') && html.includes('Serramenti')
+    && html.includes('€120.00') && html.includes('€1020.00') && html.includes('<svg');
+  check('Moduli: muratore + elettrico + serramenti (totali e PDF)', ok, `somma=${somma}`);
+} catch (e) { check('Moduli: muratore + elettrico + serramenti (totali e PDF)', false, e.message); }
+
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);
