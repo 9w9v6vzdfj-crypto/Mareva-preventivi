@@ -4,7 +4,8 @@ PWA per artigiani (imbianchino, muratore, elettricista, idraulico,
 serramentista e mestiere libero) per gestire **sopralluoghi** e **preventivi**
 dal telefono: rilievo degli ambienti, lavorazioni con prezzi (e quantità per i
 mestieri tecnici), sconto/IVA, PDF stampabile con intestazione dell'impresa,
-archivio con stati (bozza / inviato / accettato / rifiutato).
+archivio con stati (bozza / inviato / accettato / rifiutato) e duplicazione
+dei preventivi per lavori simili.
 
 Il **muratore** può lavorare da impresa generale: nel documento si attivano i
 "moduli" degli altri mestieri (imbiancatura, elettrico, idraulico, serramenti)

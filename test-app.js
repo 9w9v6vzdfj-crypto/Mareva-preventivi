@@ -182,5 +182,21 @@ try {
   check('Moduli: muratore + elettrico + serramenti (totali e PDF)', ok, `somma=${somma}`);
 } catch (e) { check('Moduli: muratore + elettrico + serramenti (totali e PDF)', false, e.message); }
 
+// 8) Cambio mestiere con auto-modulo: da imbianchino a muratore le voci
+//    restano come modulo 🎨 (prima venivano cancellate col confirm).
+try {
+  const sb = loadApp({ mv_mestiere: 'imbianchino' });
+  boot(sb);
+  vm.runInContext(`
+    locali.push({id:0,nome:'Camera',lung:4,larg:3,h:2.7,lavori:['Tutto bianco'],lavoriPrezzi:{'Tutto bianco':300},lavoriQta:{},serramenti:[],condizioni:[],condNote:'',materiali:''});
+    setMestiere('muratore');
+  `, sb);
+  const r = JSON.parse(vm.runInContext(
+    `JSON.stringify({m:mestiere,mod:pModuli,lav:locali[0].lavori,cat:locali[0].lavoriCat,tot:sommaLavoriLoc(locali[0],'muratore')})`, sb));
+  const ok = r.m === 'muratore' && r.mod.includes('imbianchino') && r.lav.length === 1
+    && r.cat && r.cat['Tutto bianco'] === 'imbianchino' && Math.abs(r.tot - 300) < 1e-9;
+  check('Cambio mestiere: voci conservate come modulo (no perdita dati)', ok, JSON.stringify(r));
+} catch (e) { check('Cambio mestiere: voci conservate come modulo (no perdita dati)', false, e.message); }
+
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);
