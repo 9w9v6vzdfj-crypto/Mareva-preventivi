@@ -102,5 +102,53 @@ for (const trade of ['imbianchino', 'muratore']) {
   } catch (e) { check('PDF ' + trade + ' invariato', false, e.message); }
 }
 
+// 5) Escape HTML: nome locale / materiali con caratteri speciali non devono
+//    rompere il markup della card (XSS via rinomina locale o backup importato).
+try {
+  const sb = loadApp({});
+  boot(sb);
+  const evil = {
+    id: 0, nome: '"><img src=x onerror=1>', lung: 4, larg: 3, h: 2.7,
+    lavori: [], lavoriPrezzi: {}, lavoriQta: {},
+    materiali: '</textarea><script>alert(1)<\/script>',
+    condizioni: [], condNote: '', incPareti: true, incSoffitto: true, _open: true,
+  };
+  const html = sb.buildLocCard('s', evil);
+  const ok = !html.includes('"><img') && !html.includes('<script>');
+  check('Escape HTML nei template dei locali', ok, 'markup non escapato');
+} catch (e) { check('Escape HTML nei template dei locali', false, e.message); }
+
+// 6) Serramentista: totale (qta × prezzo dei serramenti + voci), disegno SVG
+//    con simboli di apertura e quote, e PDF preventivo che li include.
+try {
+  const sb = loadApp({ mv_mestiere: 'serramentista' });
+  boot(sb);
+  const loc = {
+    id: 0, nome: 'Soggiorno', lavori: ['Posa in opera'], lavoriPrezzi: { 'Posa in opera': 100 }, lavoriQta: { 'Posa in opera': 2 },
+    serramenti: [
+      { id: 0, tipo: 'finestra', lung: 1200, alt: 1400, ante: 2, aperture: ['battente-sx', 'ribalta-dx'], qta: 2, prezzo: 450, note: 'PVC bianco' },
+      { id: 1, tipo: 'portafinestra', lung: 1400, alt: 2300, ante: 2, aperture: ['vasistas', 'battente-dx'], qta: 1, prezzo: 820, note: '' },
+    ],
+    condizioni: [], condNote: '', materiali: '',
+  };
+  // 2×450 + 820 (serramenti) + 2×100 (posa) = 1920
+  const somma = sb.sommaLavoriLoc(loc, 'serramentista');
+  const svg = sb.disegnoSerramento(loc.serramenti[0]);
+  sb.mestiere = 'serramentista';
+  const d = {
+    id: 1, numero: '📄 P–2026/001', data: '10/03/2026', dataISO: '2026-03-10T09:00:00.000Z', stato: 'bozza',
+    mestiere: 'serramentista', tipoStruttura: 'Appartamento',
+    cliente: { nome: 'Mario', cognome: 'Rossi' }, locali: [loc], supTot: 0,
+    optMdoPerLocale: false, optCondPerLocale: false, mdoGenerale: 0, sconto: 0, iva: 22,
+    condizioniGen: [], condNoteGen: '', note: { libere: '' }, validita: '30', totale: 0,
+  };
+  const html = sb.buildAntHTML(d);
+  const ok = Math.abs(somma - 1920) < 1e-9
+    && svg.includes('<svg') && svg.includes('stroke-dasharray')   // simboli apertura tratteggiati
+    && svg.includes('>1200<') && svg.includes('>1400<')           // quote in mm
+    && html.includes('<svg') && html.includes('€1920.00');        // disegno + subtotale nel PDF
+  check('Serramentista: totale, disegno SVG e PDF', ok, `somma=${somma}`);
+} catch (e) { check('Serramentista: totale, disegno SVG e PDF', false, e.message); }
+
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);

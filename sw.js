@@ -1,5 +1,5 @@
 // Cache-busting: cambia questo nome ad ogni rilascio per forzare l'aggiornamento.
-const CACHE = 'facile-preventivo-v13';
+const CACHE = 'facile-preventivo-v14';
 const ASSETS = [
   './',
   './index.html',

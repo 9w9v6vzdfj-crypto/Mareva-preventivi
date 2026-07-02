@@ -73,6 +73,9 @@ function accediGoogle(){
 function esci(){
   const m=document.getElementById('accountMenu'); if(m) m.style.display='none';
   if(typeof firebase==='undefined' || !firebase.auth) return;
+  // I dati per ora sono solo locali: usciamo dall'account ma i documenti
+  // restano sul dispositivo. Meglio dirlo chiaramente che farlo in silenzio.
+  if(!confirm('Uscire dall\'account?\nI documenti restano salvati su questo dispositivo e saranno visibili a chiunque lo usi.')) return;
   firebase.auth().signOut();
 }
 function toggleAccountMenu(ev){
@@ -132,11 +135,16 @@ const STATO_IDRAULICO = [
   'Nuovo impianto (da zero)','Rifacimento tubazioni','Sostituzione sanitari','Riparazione perdita',
   'Impianto funzionante','Adeguamento scarichi'
 ];
+const STATO_SERRAMENTISTA = [
+  'Nuova installazione','Sostituzione su controtelaio esistente','Sostituzione con demolizione',
+  'Vecchi serramenti da smaltire','Spalle / imbotti da sistemare','Cassonetti da sostituire'
+];
 const STATO_CFG = {
   imbianchino: { mostra:true,  titolo:'Stato / condizioni', titoloLoc:'Stato / condizioni locale', opzioni:CONDIZIONI_LISTA,   noteGenPh:'Eventuali dettagli su crepe, umidità, ecc.', noteLocPh:'Note sullo stato di questo locale…' },
   muratore:    { mostra:true,  titolo:'Stato / condizioni', titoloLoc:'Stato / condizioni locale', opzioni:CONDIZIONI_LISTA,   noteGenPh:'Eventuali dettagli su crepe, umidità, ecc.', noteLocPh:'Note sullo stato di questo locale…' },
   elettricista:{ mostra:true,  titolo:'Stato impianto',      titoloLoc:'Stato impianto (locale)',  opzioni:STATO_ELETTRICISTA, noteGenPh:'Es. quadro datato, mancano salvavita, contatore…', noteLocPh:'Note sull’impianto di questo locale…' },
   idraulico:   { mostra:true,  titolo:'Stato impianto',      titoloLoc:'Stato impianto (locale)',  opzioni:STATO_IDRAULICO,    noteGenPh:'Es. tubazioni vecchie, scarichi lenti, posizione attacchi…', noteLocPh:'Note sull’impianto di questo locale…' },
+  serramentista:{mostra:true,  titolo:'Tipo intervento',     titoloLoc:'Tipo intervento (locale)', opzioni:STATO_SERRAMENTISTA,noteGenPh:'Es. controtelai ok, spalle da ripristinare, smaltimento…', noteLocPh:'Note sull’intervento in questo locale…' },
   libero:      { mostra:false, titolo:'',                    titoloLoc:'',                          opzioni:[],                 noteGenPh:'', noteLocPh:'' }
 };
 function statoCfg(m){ return STATO_CFG[m] || STATO_CFG.imbianchino; }
@@ -152,6 +160,7 @@ const MATERIALI_PH = {
   muratore:'es. pittura lavabile, stucco, primer…',
   elettricista:'es. cavi, scatole, frutti, canaline…',
   idraulico:'es. tubi, raccordi, sifoni, valvole…',
+  serramentista:'es. PVC bianco, alluminio RAL 7016, vetro 4-16-4 basso emissivo…',
   libero:'es. materiali previsti…'
 };
 function materialiPh(m){ return MATERIALI_PH[m] || MATERIALI_PH.imbianchino; }
@@ -181,6 +190,117 @@ const LAVORI_IDRAULICO = [
   'Punto acqua (carico)','Punto scarico','Posa sanitari (wc/bidet/lavabo)','Box doccia / vasca','Caldaia / scaldabagno',
   'Radiatore / termoarredo','Rubinetteria / miscelatori','Allaccio lavatrice/lavastoviglie','Collettore / distribuzione','Collaudo impianto'
 ];
+// Serramentista: i serramenti veri e propri hanno una sezione dedicata (con
+// disegno tecnico); queste sono le voci accessorie di posa, a riga libera.
+const SERRAMENTISTA_SUGGERITI = [
+  'Smontaggio e smaltimento','Posa in opera','Sistemazione spalle','Cassonetto','Tapparella / avvolgibile','Zanzariera'
+];
+
+// ══════════════════════════════════════════════════════════
+//  SERRAMENTI — tipi, aperture e disegno tecnico (prospetto)
+//  Convenzione professionale, vista dall'interno:
+//   - la "V" tratteggiata ha il VERTICE sul lato cerniere
+//   - vasistas: cerniere in basso → vertice al centro del lato inferiore
+//   - anta-ribalta: entrambi i simboli sovrapposti
+//   - scorrevole: freccia piena nel verso di scorrimento
+//   - fissa: nessun simbolo
+// ══════════════════════════════════════════════════════════
+const TIPI_SERRAMENTO = {
+  finestra:      { lbl:'Finestra',             L:1200, H:1400, ante:2 },
+  portafinestra: { lbl:'Portafinestra',        L:1400, H:2300, ante:2 },
+  porta:         { lbl:'Porta',                L:900,  H:2100, ante:1 },
+  scorrevole:    { lbl:'Scorrevole / alzante', L:2400, H:2300, ante:2, aperture:['fissa','scorrevole-sx'] }
+};
+const APERTURE = {
+  'battente-sx':   { lbl:'Battente sx' },
+  'battente-dx':   { lbl:'Battente dx' },
+  'ribalta-sx':    { lbl:'Anta-ribalta sx' },
+  'ribalta-dx':    { lbl:'Anta-ribalta dx' },
+  'vasistas':      { lbl:'Vasistas' },
+  'scorrevole-sx': { lbl:'Scorrevole ←' },
+  'scorrevole-dx': { lbl:'Scorrevole →' },
+  'fissa':         { lbl:'Fissa' }
+};
+function tipoSerrLbl(t){ return (TIPI_SERRAMENTO[t]||{}).lbl || 'Serramento'; }
+function aperturaLbl(a){ return (APERTURE[a]||{}).lbl || a; }
+// Aperture di default sensate al variare del numero di ante.
+function serrApertureDefault(n){
+  if(n<=1) return ['battente-dx'];
+  if(n===2) return ['battente-sx','battente-dx'];
+  if(n===3) return ['battente-sx','fissa','battente-dx'];
+  return ['battente-sx','fissa','fissa','battente-dx'];
+}
+
+// Simbolo di apertura di UNA anta, nel rettangolo (x,y,w,h).
+function simboloApertura(tipo,x,y,w,h){
+  const tratt=`stroke="#2563EB" stroke-width="1.3" stroke-dasharray="5 3" fill="none" stroke-linejoin="round"`;
+  const pieno=`stroke="#2563EB" stroke-width="1.6" fill="none"`;
+  const maniglia=(cx,cy)=>`<circle cx="${cx}" cy="${cy}" r="2.4" fill="#111827"/>`;
+  const battDx=`<path d="M ${x} ${y} L ${x+w} ${y+h/2} L ${x} ${y+h}" ${tratt}/>`+maniglia(x+4,y+h/2);
+  const battSx=`<path d="M ${x+w} ${y} L ${x} ${y+h/2} L ${x+w} ${y+h}" ${tratt}/>`+maniglia(x+w-4,y+h/2);
+  const vasis =`<path d="M ${x} ${y} L ${x+w/2} ${y+h} L ${x+w} ${y}" ${tratt}/>`;
+  const frecciaDx=`<line x1="${x+w*0.22}" y1="${y+h/2}" x2="${x+w*0.78}" y2="${y+h/2}" ${pieno}/><path d="M ${x+w*0.78} ${y+h/2} l -7 -4.5 v 9 z" fill="#2563EB"/>`;
+  const frecciaSx=`<line x1="${x+w*0.78}" y1="${y+h/2}" x2="${x+w*0.22}" y2="${y+h/2}" ${pieno}/><path d="M ${x+w*0.22} ${y+h/2} l 7 -4.5 v 9 z" fill="#2563EB"/>`;
+  switch(tipo){
+    case 'battente-dx':   return battDx;
+    case 'battente-sx':   return battSx;
+    case 'vasistas':      return vasis;
+    case 'ribalta-dx':    return battDx+vasis;
+    case 'ribalta-sx':    return battSx+vasis;
+    case 'scorrevole-dx': return frecciaDx;
+    case 'scorrevole-sx': return frecciaSx;
+    default: return ''; // fissa
+  }
+}
+
+// Disegno tecnico completo del serramento (SVG): telaio, ante coi simboli
+// di apertura e quote in mm. Pura (stringa in → stringa out): usata sia
+// nella UI sia nei PDF, e testabile in sandbox.
+function disegnoSerramento(s, maxW, maxH){
+  const L=Math.max(parseFloat(s.lung)||0,100), H=Math.max(parseFloat(s.alt)||0,100);
+  maxW=maxW||210; maxH=maxH||190;
+  const QUOTA=24;                          // spazio per le quote (basso + destra)
+  const sc=Math.min((maxW-QUOTA-4)/L,(maxH-QUOTA-4)/H);
+  const w=L*sc, h=H*sc;
+  const x0=2, y0=2;
+  const W=Math.ceil(w+QUOTA+6), Vh=Math.ceil(h+QUOTA+6);
+  const telaio=Math.max(Math.min(60*sc,9),2.5);   // spessore telaio (~60 mm reali)
+  const nAnte=Math.min(Math.max(parseInt(s.ante)||1,1),4);
+  const ax=x0+telaio, ay=y0+telaio, aw=(w-2*telaio)/nAnte, ah=h-2*telaio;
+  let ante='';
+  for(let i=0;i<nAnte;i++){
+    const X=ax+i*aw;
+    ante+=`<rect x="${X.toFixed(1)}" y="${ay.toFixed(1)}" width="${aw.toFixed(1)}" height="${ah.toFixed(1)}" fill="#EFF6FF" stroke="#111827" stroke-width="1"/>`;
+  }
+  for(let i=0;i<nAnte;i++){
+    const X=ax+i*aw;
+    ante+=simboloApertura((s.aperture||[])[i]||'fissa', X, ay, aw, ah);
+  }
+  // Quote: orizzontale sotto, verticale a destra (stile disegno tecnico).
+  const qy=y0+h+12, qx=x0+w+12;
+  const quote=`
+    <line x1="${x0}" y1="${qy}" x2="${x0+w}" y2="${qy}" stroke="#6B7280" stroke-width=".8"/>
+    <line x1="${x0}" y1="${qy-3.5}" x2="${x0}" y2="${qy+3.5}" stroke="#6B7280" stroke-width=".8"/>
+    <line x1="${x0+w}" y1="${qy-3.5}" x2="${x0+w}" y2="${qy+3.5}" stroke="#6B7280" stroke-width=".8"/>
+    <text x="${x0+w/2}" y="${qy+9.5}" text-anchor="middle" font-size="8.5" fill="#374151" font-family="inherit">${Math.round(L)}</text>
+    <line x1="${qx}" y1="${y0}" x2="${qx}" y2="${y0+h}" stroke="#6B7280" stroke-width=".8"/>
+    <line x1="${qx-3.5}" y1="${y0}" x2="${qx+3.5}" y2="${y0}" stroke="#6B7280" stroke-width=".8"/>
+    <line x1="${qx-3.5}" y1="${y0+h}" x2="${qx+3.5}" y2="${y0+h}" stroke="#6B7280" stroke-width=".8"/>
+    <text x="${qx+8}" y="${y0+h/2}" text-anchor="middle" font-size="8.5" fill="#374151" font-family="inherit" transform="rotate(-90 ${qx+8} ${y0+h/2})">${Math.round(H)}</text>`;
+  return `<svg viewBox="0 0 ${W} ${Vh}" width="${W}" height="${Vh}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${tipoSerrLbl(s.tipo)} ${Math.round(L)}×${Math.round(H)} mm">
+    <rect x="${x0}" y="${y0}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="#fff" stroke="#111827" stroke-width="1.6"/>
+    ${ante}
+    ${quote}
+  </svg>`;
+}
+// Somma qta × prezzo dei serramenti di un locale.
+function sommaSerramenti(loc){
+  return (loc.serramenti||[]).reduce((s,x)=>s+(parseFloat(x.qta)||1)*(parseFloat(x.prezzo)||0),0);
+}
+// Copia profonda dei serramenti (per salvataggi/aperture senza riferimenti condivisi).
+function copiaSerramenti(l){
+  return (l.serramenti||[]).map(x=>({...x, aperture:[...(x.aperture||[])]}));
+}
 
 // ══════════════════════════════════════════════════════════
 //  CONFIGURAZIONE MESTIERI
@@ -196,6 +316,7 @@ const MESTIERI = {
   muratore:     { nome:'Muratore',        short:'Muratore',     icona:'🧱', superficie:'pavimento',        quantita:false, lavoriMode:'freetext',  suggeriti:MURATORE_SUGGERITI, lavori:LAVORI_MURATORE },
   elettricista: { nome:'Elettricista',    short:'Elettricista', icona:'⚡', superficie:'nessuna',          quantita:true,  lavoriMode:'checklist', suggeriti:[],                lavori:LAVORI_ELETTRICISTA },
   idraulico:    { nome:'Idraulico',       short:'Idraulico',    icona:'🔧', superficie:'nessuna',          quantita:true,  lavoriMode:'checklist', suggeriti:[],                lavori:LAVORI_IDRAULICO },
+  serramentista:{ nome:'Serramentista',   short:'Serramenti',   icona:'🪟', superficie:'nessuna',          quantita:true,  lavoriMode:'freetext',  suggeriti:SERRAMENTISTA_SUGGERITI, lavori:[], serramenti:true },
   libero:       { nome:'Mestiere libero', short:'Libero',       icona:'🛠', superficie:'opzionale',        quantita:true,  lavoriMode:'freetext',  suggeriti:[],                lavori:[] }
 };
 function cfgMestiere(m){ return MESTIERI[m] || MESTIERI.imbianchino; }
@@ -249,7 +370,7 @@ const Store = {
   loadImpresa(){ return this._read(this.KEYS.impresa, {}); },
   saveImpresa(obj){ return this._write(this.KEYS.impresa, obj); },
 
-  loadLavoriCustom(){ return this._read(this.KEYS.lavoriCustom, {imbianchino:[],muratore:[],elettricista:[],idraulico:[],libero:[]}); },
+  loadLavoriCustom(){ return this._read(this.KEYS.lavoriCustom, {imbianchino:[],muratore:[],elettricista:[],idraulico:[],serramentista:[],libero:[]}); },
   saveLavoriCustom(obj){ return this._write(this.KEYS.lavoriCustom, obj); },
 
   getMestiere(){ return this._readRaw(this.KEYS.mestiere, 'imbianchino'); },
@@ -260,6 +381,13 @@ function esc(s){
   return String(s==null?'':s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+// Escape per valori utente dentro una stringa JS a apici singoli in un
+// attributo onclick/onchange: prima escape JS (\ e '), poi escape HTML
+// dell'attributo. L'HTML dell'attributo viene decodificato prima di eseguire
+// il JS, quindi l'ordine e' importante.
+function escJs(s){
+  return esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
 }
 
 // Liste personalizzabili (lavori extra aggiunti dall'utente), salvate per mestiere
@@ -289,11 +417,17 @@ function qtaOf(loc, nome){
 // Mestieri SENZA quantità (imbianchino/muratore): formula ORIGINALE invariata.
 // Mestieri CON quantità: somma di qta×prezzo sulle voci selezionate.
 function sommaLavoriLoc(loc, mest){
+  const cfg=cfgMestiere(mest||mestiere);
   const prezzi=loc.lavoriPrezzi||{};
-  if(cfgMestiere(mest||mestiere).quantita){
-    return (loc.lavori||[]).reduce((s,n)=>s + qtaOf(loc,n)*((prezzi[n])||0), 0);
+  let tot;
+  if(cfg.quantita){
+    tot=(loc.lavori||[]).reduce((s,n)=>s + qtaOf(loc,n)*((prezzi[n])||0), 0);
+  } else {
+    tot=Object.values(prezzi).reduce((s,p)=>s+(p||0),0);
   }
-  return Object.values(prezzi).reduce((s,p)=>s+(p||0),0);
+  // Serramentista: i serramenti (qta × prezzo) si sommano alle voci di posa.
+  if(cfg.serramenti) tot+=sommaSerramenti(loc);
+  return tot;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -424,28 +558,36 @@ function autoSalva(){
 // ══════════════════════════════════════════════════════════
 //  MESTIERE
 // ══════════════════════════════════════════════════════════
-function setMestiere(m){
+function setMestiere(m, force){
   if(m===mestiere){ applyMestiereUI(); return; }
-  // Se ci sono lavorazioni gia' inserite non compatibili col nuovo mestiere,
-  // chiedi conferma (verranno rimosse insieme ai relativi prezzi/quantita').
-  const newList = lavoriList(m);
-  const allLocs = [...sLocali, ...locali];
-  const hasIncompatible = allLocs.some(loc =>
-    (loc.lavori||[]).some(n => !newList.includes(n))
-  );
-  if(hasIncompatible && !confirm('Cambiando attivita\' le lavorazioni non compatibili saranno rimosse. Continuare?')){
-    applyMestiereUI(); // ripristina la selezione UI senza cambiare mestiere
-    return;
-  }
-  if(hasIncompatible){
-    const clean = loc => {
-      const rimossi = (loc.lavori||[]).filter(n => !newList.includes(n));
-      loc.lavori = (loc.lavori||[]).filter(n => newList.includes(n));
-      if(loc.lavoriPrezzi) rimossi.forEach(n => delete loc.lavoriPrezzi[n]);
-      if(loc.lavoriQta)    rimossi.forEach(n => delete loc.lavoriQta[n]);
-    };
-    sLocali.forEach(clean);
-    locali.forEach(clean);
+  // force=true: apertura di un documento salvato. Niente conferma ne' pulizia:
+  // la verifica riguarda i dati del form corrente, che verranno comunque
+  // sostituiti da quelli del documento. Prima il confirm poteva bloccare
+  // l'apertura e, se annullato, il documento si apriva col mestiere sbagliato.
+  if(!force){
+    // Se ci sono lavorazioni gia' inserite non compatibili col nuovo mestiere,
+    // chiedi conferma (verranno rimosse insieme ai relativi prezzi/quantita').
+    const newList = lavoriList(m);
+    const allLocs = [...sLocali, ...locali];
+    const hasIncompatible = allLocs.some(loc =>
+      (loc.lavori||[]).some(n => !newList.includes(n)) ||
+      (!cfgMestiere(m).serramenti && (loc.serramenti||[]).length)
+    );
+    if(hasIncompatible && !confirm('Cambiando attivita\' le lavorazioni non compatibili saranno rimosse. Continuare?')){
+      applyMestiereUI(); // ripristina la selezione UI senza cambiare mestiere
+      return;
+    }
+    if(hasIncompatible){
+      const clean = loc => {
+        const rimossi = (loc.lavori||[]).filter(n => !newList.includes(n));
+        loc.lavori = (loc.lavori||[]).filter(n => newList.includes(n));
+        if(loc.lavoriPrezzi) rimossi.forEach(n => delete loc.lavoriPrezzi[n]);
+        if(loc.lavoriQta)    rimossi.forEach(n => delete loc.lavoriQta[n]);
+        if(!cfgMestiere(m).serramenti) loc.serramenti=[];
+      };
+      sLocali.forEach(clean);
+      locali.forEach(clean);
+    }
   }
   mestiere=m;
   Store.setMestiere(m);
@@ -618,7 +760,7 @@ function sAddLocale(){
   const inp=document.getElementById('sNuovoLocale');
   const nome=(inp.value||'').trim();
   if(!nome){inp.focus();return;}
-  sLocali.push({id:sLocCnt++, nome, lung:4, larg:3, h:2.7, lavori:[], lavoriPrezzi:{}, lavoriQta:{}, materiali:'', condizioni:[], condNote:'', incPareti:true, incSoffitto:true, _open:true});
+  sLocali.push({id:sLocCnt++, nome, lung:4, larg:3, h:2.7, lavori:[], lavoriPrezzi:{}, lavoriQta:{}, serramenti:[], materiali:'', condizioni:[], condNote:'', incPareti:true, incSoffitto:true, _open:true});
   inp.value='';
   sRenderLocali();
 }
@@ -633,7 +775,7 @@ function pAddLocale(){
   const inp=document.getElementById('pNuovoLocale');
   const nome=(inp.value||'').trim();
   if(!nome){inp.focus();return;}
-  locali.push({id:locCnt++, nome, lung:4, larg:3, h:2.7, lavori:[], materiali:'', condizioni:[], condNote:'', lavoriPrezzi:{}, lavoriQta:{}, mdoLocale:0, incPareti:true, incSoffitto:true, _open:true});
+  locali.push({id:locCnt++, nome, lung:4, larg:3, h:2.7, lavori:[], materiali:'', condizioni:[], condNote:'', lavoriPrezzi:{}, lavoriQta:{}, serramenti:[], mdoLocale:0, incPareti:true, incSoffitto:true, _open:true});
   inp.value='';
   pRenderLocali();
 }
@@ -657,10 +799,11 @@ function renderLocaliGeneric(prefix, arr, listId, boxId, valId){
   // init sub-renders
   arr.forEach(loc=>{
     renderLavoriList(prefix,loc.id);
+    if(cfgMestiere(mestiere).serramenti) renderSerramenti(prefix,loc.id);
     if((prefix==='s'?optCondLocaleS():optCondPerLocale)) renderCondLocale(prefix,loc.id);
   });
 }
-function optCondLocaleS(){ return optCondPerLocale; } // sopralluogo segue stessa impostazione del preventivo (persistita)
+function optCondLocaleS(){ return optCondPerLocale; } // il sopralluogo segue, nella sessione corrente, lo stesso interruttore del preventivo; l'opzione viene salvata nel documento come condPerLocale
 
 function aggSupTotGeneric(prefix, arr, valId){
   const tot=arr.reduce((s,l)=>s+supLoc(l),0);
@@ -680,9 +823,15 @@ function subLocale(loc, aperto){
       ? (lavCount ? `${mqTxt} · ${lavTxt}` : mqTxt)
       : (lavCount ? `${mqTxt} · ${lavTxt} · tocca per modificare` : `${mqTxt} · tocca per misure e lavori`);
   }
+  // Serramentista: nel sottotitolo contano anche i serramenti.
+  const serrCount = cfgMestiere(mestiere).serramenti ? (loc.serramenti||[]).length : 0;
+  const parti=[];
+  if(serrCount) parti.push(`${serrCount} serrament${serrCount===1?'o':'i'}`);
+  if(lavCount) parti.push(lavTxt);
+  const txt=parti.join(' · ');
   return aperto
-    ? (lavCount ? lavTxt : 'Nessuna voce')
-    : (lavCount ? `${lavTxt} · tocca per modificare` : 'Tocca per aggiungere voci');
+    ? (txt || 'Nessuna voce')
+    : (txt ? `${txt} · tocca per modificare` : 'Tocca per aggiungere voci');
 }
 // Aggiorna il totale riga (qta×prezzo) di una voce, se presente nel DOM.
 // Per imbianchino/muratore la riga non ha questo elemento → no-op.
@@ -703,7 +852,7 @@ function buildLocCard(prefix, loc){
       <div class="locale-hdr-l">
         <div class="locale-emoji">${e}</div>
         <div style="min-width:0;flex:1">
-          <input class="locale-hdr-name" value="${loc.nome}" onclick="event.stopPropagation()" oninput="${prefix}RenameLocale(${loc.id},this.value)">
+          <input class="locale-hdr-name" value="${esc(loc.nome)}" onclick="event.stopPropagation()" oninput="${prefix}RenameLocale(${loc.id},this.value)">
           <div class="locale-hdr-sub" id="${prefix}hdr-sub-${loc.id}">${sub}</div>
         </div>
       </div>
@@ -793,16 +942,23 @@ function locBodyHTML(prefix, loc){
       </div>
     </div>
     `;
+  // Sezione serramenti (solo serramentista): elenco con disegno tecnico.
+  const sezioneSerramenti = cfg.serramenti ? `
+    <div class="section-lbl" style="margin-top:0">Serramenti</div>
+    <div id="${prefix}serrlist-${loc.id}"></div>
+    <button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:4px" onclick="serrAdd('${prefix}',${loc.id})">+ Aggiungi serramento</button>
+  ` : '';
   return `
     ${sezioneMisure}
-    <div class="section-lbl"${mestiereHaSuperficie(mestiere)?'':' style="margin-top:0"'}>Lavori da effettuare</div>
+    ${sezioneSerramenti}
+    <div class="section-lbl"${(mestiereHaSuperficie(mestiere)||cfg.serramenti)?'':' style="margin-top:0"'}>${cfg.serramenti?'Voci di posa / extra':'Lavori da effettuare'}</div>
     ${sezioneSceltaLavori}
     <div id="${prefix}lavlist-${loc.id}"></div>
 
     <div class="section-lbl">Materiali previsti</div>
     <div class="field" style="margin-bottom:0">
       <textarea class="textarea" placeholder="${materialiPh(mestiere)}" rows="2"
-        oninput="${prefix}SetMateriali(${loc.id},this.value)">${loc.materiali||''}</textarea>
+        oninput="${prefix}SetMateriali(${loc.id},this.value)">${esc(loc.materiali||'')}</textarea>
     </div>
 
     ${(condPerLocale && mestiereMostraStato(mestiere))?`
@@ -818,7 +974,7 @@ function locBodyHTML(prefix, loc){
     </div>
     <div class="field" style="margin-top:8px;margin-bottom:0">
       <textarea class="textarea" placeholder="${statoCfg(mestiere).noteLocPh}" rows="2"
-        oninput="${prefix}SetCondNote(${loc.id},this.value)">${loc.condNote||''}</textarea>
+        oninput="${prefix}SetCondNote(${loc.id},this.value)">${esc(loc.condNote||'')}</textarea>
     </div>`:''}
 
     ${(prefix==='p' && optMdoPerLocale)?`
@@ -877,8 +1033,8 @@ function renderLavoriList(prefix,id){
     const lista=lavoriList(mestiere);
     checks.innerHTML=lista.map(n=>`
       <label class="check-item${loc.lavori.includes(n)?' on':''}">
-        <input type="checkbox" ${loc.lavori.includes(n)?'checked':''} onchange="${prefix}ToggleLavoro(${id},'${n.replace(/'/g,"\\'")}')">
-        <span>${n}</span>
+        <input type="checkbox" ${loc.lavori.includes(n)?'checked':''} onchange="${prefix}ToggleLavoro(${id},'${escJs(n)}')">
+        <span>${esc(n)}</span>
       </label>`).join('');
   }
   // Mestieri freetext: scorciatoie (suggerite + già digitate) non ancora selezionate
@@ -886,7 +1042,7 @@ function renderLavoriList(prefix,id){
   if(quick){
     const base=[...(cfgMestiere(mestiere).suggeriti||[]), ...(lavoriCustom[mestiere]||[])];
     const usati=[...new Set(base)].filter(n=>!loc.lavori.includes(n));
-    quick.innerHTML=usati.map(n=>`<button class="chip-add" onclick="${prefix}ToggleLavoro(${id},'${n.replace(/'/g,"\\'")}')">+ ${n}</button>`).join('');
+    quick.innerHTML=usati.map(n=>`<button class="chip-add" onclick="${prefix}ToggleLavoro(${id},'${escJs(n)}')">+ ${esc(n)}</button>`).join('');
   }
   const list=document.getElementById(prefix+'lavlist-'+id);
   if(list){
@@ -897,41 +1053,41 @@ function renderLavoriList(prefix,id){
       list.innerHTML=`<div style="margin-top:8px">${loc.lavori.map(n=>`
         <div class="lavoro-rowq">
           <div class="lavoro-rowq-top">
-            <span class="lavoro-nome">${n}</span>
-            <button class="btn-danger" onclick="sToggleLavoro(${id},'${n.replace(/'/g,"\\'")}')">✕</button>
+            <span class="lavoro-nome">${esc(n)}</span>
+            <button class="btn-danger" onclick="sToggleLavoro(${id},'${escJs(n)}')">✕</button>
           </div>
           <div class="lavoro-rowq-bot">
             <span class="qlbl">Quantità</span>
             <div class="qstep">
-              <button type="button" class="qstep-btn" onclick="sStepQta(${id},'${n.replace(/'/g,"\\'")}',-1)">−</button>
+              <button type="button" class="qstep-btn" onclick="sStepQta(${id},'${escJs(n)}',-1)">−</button>
               <input class="qbox qbox-step" type="number" inputmode="numeric" min="1" step="1"
-                value="${qtaOf(loc,n)}" oninput="sSetLavoroQta(${id},'${n.replace(/'/g,"\\'")}',this.value)">
-              <button type="button" class="qstep-btn" onclick="sStepQta(${id},'${n.replace(/'/g,"\\'")}',1)">+</button>
+                value="${qtaOf(loc,n)}" oninput="sSetLavoroQta(${id},'${escJs(n)}',this.value)">
+              <button type="button" class="qstep-btn" onclick="sStepQta(${id},'${escJs(n)}',1)">+</button>
             </div>
           </div>
         </div>`).join('')}</div>`;
     } else if(prefix==='s'){
       list.innerHTML=`<div class="chip-row">${loc.lavori.map(n=>`
-        <span class="chip">${n}<button onclick="sToggleLavoro(${id},'${n.replace(/'/g,"\\'")}')">✕</button></span>`).join('')}</div>`;
+        <span class="chip">${esc(n)}<button onclick="sToggleLavoro(${id},'${escJs(n)}')">✕</button></span>`).join('')}</div>`;
     } else if(cfgMestiere(mestiere).quantita){
       // preventivo CON quantità: Q.tà (con −/+) × Prezzo = Totale
       list.innerHTML=`<div style="margin-top:8px">${loc.lavori.map((n,idx)=>`
         <div class="lavoro-rowq">
           <div class="lavoro-rowq-top">
-            <span class="lavoro-nome">${n}</span>
-            <button class="btn-danger" onclick="pToggleLavoro(${id},'${n.replace(/'/g,"\\'")}')">✕</button>
+            <span class="lavoro-nome">${esc(n)}</span>
+            <button class="btn-danger" onclick="pToggleLavoro(${id},'${escJs(n)}')">✕</button>
           </div>
           <div class="lavoro-rowq-bot">
             <div class="qstep">
-              <button type="button" class="qstep-btn" onclick="pStepQta(${id},'${n.replace(/'/g,"\\'")}',-1)">−</button>
+              <button type="button" class="qstep-btn" onclick="pStepQta(${id},'${escJs(n)}',-1)">−</button>
               <input class="qbox qbox-step" type="number" inputmode="numeric" min="1" step="1"
-                value="${qtaOf(loc,n)}" oninput="pSetLavoroQta(${id},'${n.replace(/'/g,"\\'")}',this.value)">
-              <button type="button" class="qstep-btn" onclick="pStepQta(${id},'${n.replace(/'/g,"\\'")}',1)">+</button>
+                value="${qtaOf(loc,n)}" oninput="pSetLavoroQta(${id},'${escJs(n)}',this.value)">
+              <button type="button" class="qstep-btn" onclick="pStepQta(${id},'${escJs(n)}',1)">+</button>
             </div>
             <span class="qmul">×</span>
             <input class="qbox" type="number" inputmode="decimal" min="0" step="0.01" placeholder="€"
               value="${loc.lavoriPrezzi?.[n]||''}"
-              oninput="pSetLavoroPrezzo(${id},'${n.replace(/'/g,"\\'")}',this.value)">
+              oninput="pSetLavoroPrezzo(${id},'${escJs(n)}',this.value)">
             <span class="qeq">=</span>
             <span class="qtot" id="prigatot-${id}-${idx}">€${(qtaOf(loc,n)*((loc.lavoriPrezzi?.[n])||0)).toFixed(2)}</span>
           </div>
@@ -940,11 +1096,11 @@ function renderLavoriList(prefix,id){
       // preventivo: ogni lavoro con prezzo
       list.innerHTML=`<div style="margin-top:8px">${loc.lavori.map(n=>`
         <div class="lavoro-row">
-          <span class="lavoro-nome">${n}</span>
+          <span class="lavoro-nome">${esc(n)}</span>
           <input class="input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="€"
             value="${loc.lavoriPrezzi?.[n]||''}"
-            oninput="pSetLavoroPrezzo(${id},'${n.replace(/'/g,"\\'")}',this.value)">
-          <button class="btn-danger" onclick="pToggleLavoro(${id},'${n.replace(/'/g,"\\'")}')">✕</button>
+            oninput="pSetLavoroPrezzo(${id},'${escJs(n)}',this.value)">
+          <button class="btn-danger" onclick="pToggleLavoro(${id},'${escJs(n)}')">✕</button>
         </div>`).join('')}</div>`;
     }
   }
@@ -1046,6 +1202,150 @@ function pAddLavoroCustom(id){
   ricalcola();
 }
 
+// ── SERRAMENTI: render + handlers (solo serramentista) ──
+function _serrLoc(prefix,locId){
+  return (prefix==='s'?sLocali:locali).find(l=>l.id===locId);
+}
+function renderSerramenti(prefix,locId){
+  const loc=_serrLoc(prefix,locId); if(!loc) return;
+  const c=document.getElementById(prefix+'serrlist-'+locId); if(!c) return;
+  loc.serramenti=loc.serramenti||[];
+  c.innerHTML=loc.serramenti.length
+    ? loc.serramenti.map(s=>serramentoCardHTML(prefix,locId,s)).join('')
+    : '<p style="text-align:center;color:var(--sub);font-size:13px;padding:8px 0 10px">Nessun serramento. Aggiungine uno qui sotto.</p>';
+}
+function serramentoCardHTML(prefix,locId,s){
+  const conPrezzo = prefix==='p';
+  let anteSel='';
+  const nAnte=Math.min(Math.max(parseInt(s.ante)||1,1),4);
+  for(let i=0;i<nAnte;i++){
+    anteSel+=`<div class="field" style="margin-bottom:6px"><label class="label">Apertura anta ${i+1}</label>
+      <select class="select" onchange="serrSet('${prefix}',${locId},${s.id},'ap${i}',this.value)">
+        ${Object.keys(APERTURE).map(k=>`<option value="${k}"${((s.aperture||[])[i]||'fissa')===k?' selected':''}>${APERTURE[k].lbl}</option>`).join('')}
+      </select></div>`;
+  }
+  const rigaQP = conPrezzo ? `
+    <div class="lavoro-rowq-bot">
+      <div class="qstep">
+        <button type="button" class="qstep-btn" onclick="serrStepQta('${prefix}',${locId},${s.id},-1)">−</button>
+        <input class="qbox qbox-step" type="number" inputmode="numeric" min="1" step="1" value="${s.qta||1}" oninput="serrSet('${prefix}',${locId},${s.id},'qta',this.value)">
+        <button type="button" class="qstep-btn" onclick="serrStepQta('${prefix}',${locId},${s.id},1)">+</button>
+      </div>
+      <span class="qmul">×</span>
+      <input class="qbox" type="number" inputmode="decimal" min="0" step="0.01" placeholder="€" value="${s.prezzo||''}" oninput="serrSet('${prefix}',${locId},${s.id},'prezzo',this.value)">
+      <span class="qeq">=</span>
+      <span class="qtot" id="${prefix}serr-tot-${locId}-${s.id}">€${((parseFloat(s.qta)||1)*(parseFloat(s.prezzo)||0)).toFixed(2)}</span>
+    </div>` : `
+    <div class="lavoro-rowq-bot">
+      <span class="qlbl">Quantità</span>
+      <div class="qstep">
+        <button type="button" class="qstep-btn" onclick="serrStepQta('${prefix}',${locId},${s.id},-1)">−</button>
+        <input class="qbox qbox-step" type="number" inputmode="numeric" min="1" step="1" value="${s.qta||1}" oninput="serrSet('${prefix}',${locId},${s.id},'qta',this.value)">
+        <button type="button" class="qstep-btn" onclick="serrStepQta('${prefix}',${locId},${s.id},1)">+</button>
+      </div>
+    </div>`;
+  return `<div class="serr-card">
+    <div class="serr-hdr">
+      <span class="serr-title" id="${prefix}serr-title-${locId}-${s.id}">🪟 ${tipoSerrLbl(s.tipo)} ${Math.round(s.lung||0)}×${Math.round(s.alt||0)} mm</span>
+      <button class="btn-danger" onclick="serrRemove('${prefix}',${locId},${s.id})" aria-label="Rimuovi serramento">✕</button>
+    </div>
+    <div class="row2">
+      <div class="field"><label class="label">Tipo</label>
+        <select class="select" onchange="serrSet('${prefix}',${locId},${s.id},'tipo',this.value)">
+          ${Object.keys(TIPI_SERRAMENTO).map(k=>`<option value="${k}"${s.tipo===k?' selected':''}>${TIPI_SERRAMENTO[k].lbl}</option>`).join('')}
+        </select></div>
+      <div class="field"><label class="label">Ante</label>
+        <select class="select" onchange="serrSet('${prefix}',${locId},${s.id},'ante',this.value)">
+          ${[1,2,3,4].map(n=>`<option value="${n}"${nAnte===n?' selected':''}>${n}</option>`).join('')}
+        </select></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label class="label">Larghezza (mm)</label>
+        <input class="input" type="number" inputmode="numeric" min="0" step="10" value="${s.lung||''}" oninput="serrSet('${prefix}',${locId},${s.id},'lung',this.value)"></div>
+      <div class="field"><label class="label">Altezza (mm)</label>
+        <input class="input" type="number" inputmode="numeric" min="0" step="10" value="${s.alt||''}" oninput="serrSet('${prefix}',${locId},${s.id},'alt',this.value)"></div>
+    </div>
+    ${anteSel}
+    <div class="serr-svg" id="${prefix}serr-svg-${locId}-${s.id}">${disegnoSerramento(s)}</div>
+    <div class="field" style="margin-bottom:8px"><label class="label">Descrizione (materiale, colore, vetro…)</label>
+      <input class="input" value="${esc(s.note||'')}" placeholder="${materialiPh('serramentista')}" oninput="serrSet('${prefix}',${locId},${s.id},'note',this.value)"></div>
+    ${rigaQP}
+  </div>`;
+}
+// Aggiornamenti "leggeri" senza rifare tutta la card (per non perdere il focus).
+function serrAggiornaSvg(prefix,locId,s){
+  const el=document.getElementById(prefix+'serr-svg-'+locId+'-'+s.id);
+  if(el) el.innerHTML=disegnoSerramento(s);
+  const t=document.getElementById(prefix+'serr-title-'+locId+'-'+s.id);
+  if(t) t.textContent=`🪟 ${tipoSerrLbl(s.tipo)} ${Math.round(s.lung||0)}×${Math.round(s.alt||0)} mm`;
+}
+function serrAggiornaTotali(prefix,locId,loc,s){
+  if(prefix!=='p') return;
+  if(s){
+    const el=document.getElementById('pserr-tot-'+locId+'-'+s.id);
+    if(el) el.textContent='€'+((parseFloat(s.qta)||1)*(parseFloat(s.prezzo)||0)).toFixed(2);
+  }
+  const th=document.getElementById('phdr-tot-'+locId);
+  if(th && loc) th.textContent='€'+pCalcoloTotLoc(loc).toFixed(2);
+  ricalcola();
+}
+function serrAdd(prefix,locId){
+  const loc=_serrLoc(prefix,locId); if(!loc) return;
+  loc.serramenti=loc.serramenti||[];
+  const nid=loc.serramenti.length?Math.max(...loc.serramenti.map(x=>x.id))+1:0;
+  const t=TIPI_SERRAMENTO.finestra;
+  loc.serramenti.push({id:nid, tipo:'finestra', lung:t.L, alt:t.H, ante:t.ante, aperture:serrApertureDefault(t.ante), qta:1, prezzo:0, note:''});
+  renderSerramenti(prefix,locId);
+  const sub=document.getElementById(prefix+'hdr-sub-'+locId);
+  if(sub) sub.textContent=subLocale(loc,true);
+  serrAggiornaTotali(prefix,locId,loc,null);
+}
+function serrRemove(prefix,locId,sid){
+  const loc=_serrLoc(prefix,locId); if(!loc) return;
+  loc.serramenti=(loc.serramenti||[]).filter(x=>x.id!==sid);
+  renderSerramenti(prefix,locId);
+  const sub=document.getElementById(prefix+'hdr-sub-'+locId);
+  if(sub) sub.textContent=subLocale(loc,true);
+  serrAggiornaTotali(prefix,locId,loc,null);
+}
+function serrStepQta(prefix,locId,sid,delta){
+  const loc=_serrLoc(prefix,locId); if(!loc) return;
+  const s=(loc.serramenti||[]).find(x=>x.id===sid); if(!s) return;
+  s.qta=Math.max(1, Math.round((parseFloat(s.qta)||1)+delta));
+  renderSerramenti(prefix,locId);
+  serrAggiornaTotali(prefix,locId,loc,s);
+}
+function serrSet(prefix,locId,sid,field,val){
+  const loc=_serrLoc(prefix,locId); if(!loc) return;
+  const s=(loc.serramenti||[]).find(x=>x.id===sid); if(!s) return;
+  if(field==='tipo'){
+    s.tipo=val;
+    // Il cambio tipo imposta misure e ante tipiche (poi modificabili).
+    const t=TIPI_SERRAMENTO[val];
+    if(t){ s.lung=t.L; s.alt=t.H; s.ante=t.ante; s.aperture=t.aperture?[...t.aperture]:serrApertureDefault(t.ante); }
+    renderSerramenti(prefix,locId);
+  } else if(field==='ante'){
+    s.ante=Math.min(Math.max(parseInt(val)||1,1),4);
+    s.aperture=serrApertureDefault(s.ante);
+    renderSerramenti(prefix,locId);
+  } else if(field==='lung'||field==='alt'){
+    s[field]=parseFloat(val)||0;
+    serrAggiornaSvg(prefix,locId,s);
+  } else if(field.startsWith('ap')){
+    const i=parseInt(field.slice(2),10);
+    if(!s.aperture) s.aperture=[];
+    s.aperture[i]=APERTURE[val]?val:'fissa';
+    serrAggiornaSvg(prefix,locId,s);
+  } else if(field==='qta'){
+    s.qta=Math.max(1, Math.round(parseFloat(val)||1));
+  } else if(field==='prezzo'){
+    s.prezzo=parseFloat(val)||0;
+  } else if(field==='note'){
+    s.note=val;
+  }
+  serrAggiornaTotali(prefix,locId,loc,s);
+}
+
 // ── CONDIZIONI PER LOCALE ──
 function sSetCondNote(id,val){ const l=sLocali.find(x=>x.id===id); if(l) l.condNote=val; }
 function pSetCondNote(id,val){ const l=locali.find(x=>x.id===id); if(l) l.condNote=val; }
@@ -1141,6 +1441,7 @@ function sResetForm(skipConfirm){
 
 function resetForm(skipConfirm){
   if(!skipConfirm && !confirm('Azzerare tutti i dati del preventivo?')) return;
+  clearTimeout(_autoSalvaTimer); // annulla un eventuale auto-salvataggio in coda
   editId=null; locali=[]; locCnt=0; condizioni=[]; pTipoStruttura='Appartamento';
   currentStato='bozza';
   optMdoPerLocale=false; optCondPerLocale=false;
@@ -1176,7 +1477,7 @@ function sSalva(ev){
     mestiere: mestiere,
     tipoStruttura: sTipoStruttura,
     cliente:{nome,cognome:document.getElementById('sCognome').value,tel:document.getElementById('sTel').value,email:document.getElementById('sEmail').value,indirizzo:document.getElementById('sIndirizzo').value},
-    locali: sLocali.map(l=>({...l,lavori:[...l.lavori],lavoriQta:{...(l.lavoriQta||{})},condizioni:[...(l.condizioni||[])]})),
+    locali: sLocali.map(l=>({...l,lavori:[...l.lavori],lavoriQta:{...(l.lavoriQta||{})},serramenti:copiaSerramenti(l),condizioni:[...(l.condizioni||[])]})),
     supTot: sLocali.reduce((s,l)=>s+supLoc(l),0),
     condizioniGen: sCondizioni.slice(),
     condNoteGen: document.getElementById('sCondNote').value,
@@ -1195,7 +1496,7 @@ function sSalva(ev){
 function apriSopralluogo(id){
   const s=sopralluoghi.find(s=>String(s.id)===String(id)); if(!s) return;
   sEditId=s.id;
-  if(s.mestiere) setMestiere(s.mestiere);
+  if(s.mestiere) setMestiere(s.mestiere, true);
   goPage('sopralluogo');
   document.getElementById('sopNum').textContent=s.numero;
   document.getElementById('sNome').value=s.cliente?.nome||'';
@@ -1211,6 +1512,7 @@ function apriSopralluogo(id){
     lavori:[...(l.lavori||[])],
     lavoriPrezzi:{...(l.lavoriPrezzi||{})},
     lavoriQta:{...(l.lavoriQta||{})},
+    serramenti:copiaSerramenti(l),
     condizioni:[...(l.condizioni||[])]
   }));
   sLocCnt=sLocali.length?Math.max(...sLocali.map(l=>l.id))+1:0;
@@ -1230,6 +1532,9 @@ function eliminaSopralluogo(id){
   if(!confirm('Eliminare questo sopralluogo?'))return;
   sopralluoghi=sopralluoghi.filter(s=>String(s.id)!==String(id));
   Store.saveSopralluoghi(sopralluoghi);
+  // Come in elimina(): se era aperto nell'editor, azzera il form per non
+  // ricrearlo al prossimo "Salva".
+  if(String(id)===String(sEditId)) sResetForm(true);
   aggStats();
 }
 
@@ -1249,7 +1554,7 @@ function sConvertiInPreventivo(){
     mestiere: mestiere,
     tipoStruttura: sTipoStruttura,
     cliente:{nome,cognome:document.getElementById('sCognome').value,tel:document.getElementById('sTel').value,email:document.getElementById('sEmail').value,indirizzo:document.getElementById('sIndirizzo').value},
-    locali: sLocali.map(l=>({...l,lavori:[...l.lavori],lavoriQta:{...(l.lavoriQta||{})},condizioni:[...(l.condizioni||[])]})),
+    locali: sLocali.map(l=>({...l,lavori:[...l.lavori],lavoriQta:{...(l.lavoriQta||{})},serramenti:copiaSerramenti(l),condizioni:[...(l.condizioni||[])]})),
     supTot: sLocali.reduce((s,l)=>s+supLoc(l),0),
     condizioniGen: sCondizioni.slice(),
     condNoteGen: document.getElementById('sCondNote').value,
@@ -1280,7 +1585,9 @@ function sConvertiInPreventivo(){
   document.getElementById('clIndirizzo').value=d.cliente.indirizzo;
   pTipoStruttura=d.tipoStruttura;
   renderTipoStruttura('p', pTipoStruttura, 'pSetTipo');
-  locali=d.locali.map(l=>({...l, lavoriPrezzi:{}, lavoriQta:{...(l.lavoriQta||{})}, mdoLocale:0}));
+  // Serramenti: misure/aperture/quantita' passano al preventivo, i prezzi si
+  // azzerano (come i lavoriPrezzi: al sopralluogo non si prezzano le voci).
+  locali=d.locali.map(l=>({...l, lavoriPrezzi:{}, lavoriQta:{...(l.lavoriQta||{})}, serramenti:copiaSerramenti(l).map(x=>({...x, prezzo:0})), mdoLocale:0}));
   locCnt=locali.length?Math.max(...locali.map(l=>l.id))+1:0;
   condizioni=(d.condizioniGen||[]).slice();
   document.getElementById('pCondNote').value=d.condNoteGen||'';
@@ -1311,7 +1618,7 @@ function renderSopList(){
       <div class="prev-item-top">
         <div>
           <div class="prev-item-name">${mestiereIcona(s.mestiere)} ${esc(s.cliente?.nome||'')} ${esc(s.cliente?.cognome||'')}</div>
-          <div class="prev-item-num">${esc(s.numero)} · ${esc(s.data)} · ${(s.supTot||0).toFixed(1)} m²</div>
+          <div class="prev-item-num">${esc(s.numero)} · ${esc(s.data)}${mestiereHaSuperficie(s.mestiere)?` · ${(s.supTot||0).toFixed(1)} m²`:''}</div>
         </div>
         <span class="badge badge-blue">Da preventivare</span>
       </div>
@@ -1329,7 +1636,7 @@ function renderSopList(){
       <div class="prev-item-top">
         <div>
           <div class="prev-item-name">${mestiereIcona(s.mestiere)} ${esc(s.cliente?.nome||'')} ${esc(s.cliente?.cognome||'')}</div>
-          <div class="prev-item-num">${esc(s.numero)} · ${esc(s.data)} · ${(s.supTot||0).toFixed(1)} m²</div>
+          <div class="prev-item-num">${esc(s.numero)} · ${esc(s.data)}${mestiereHaSuperficie(s.mestiere)?` · ${(s.supTot||0).toFixed(1)} m²`:''}</div>
         </div>
         <span class="badge badge-green">Convertito</span>
       </div>
@@ -1362,7 +1669,7 @@ function getDati(){
       email:document.getElementById('clEmail').value,
       indirizzo:document.getElementById('clIndirizzo').value,
     },
-    locali: locali.map(l=>({...l, lavori:[...l.lavori], lavoriPrezzi:{...(l.lavoriPrezzi||{})}, lavoriQta:{...(l.lavoriQta||{})}, condizioni:[...(l.condizioni||[])]})),
+    locali: locali.map(l=>({...l, lavori:[...l.lavori], lavoriPrezzi:{...(l.lavoriPrezzi||{})}, lavoriQta:{...(l.lavoriQta||{})}, serramenti:copiaSerramenti(l), condizioni:[...(l.condizioni||[])]})),
     supTot: locali.reduce((s,l)=>s+supLoc(l),0),
     optMdoPerLocale, optCondPerLocale,
     mdoGenerale: parseFloat(document.getElementById('mdoGenerale').value)||0,
@@ -1399,7 +1706,7 @@ function apriPrev(id){
   const p=preventivi.find(p=>String(p.id)===String(id)); if(!p) return;
   editId=p.id;
   currentStato=p.stato||'bozza';
-  if(p.mestiere) setMestiere(p.mestiere);
+  if(p.mestiere) setMestiere(p.mestiere, true);
   goPage('nuovo');
   document.getElementById('prevNum').textContent=p.numero;
   document.getElementById('clNome').value=p.cliente?.nome||'';
@@ -1415,7 +1722,7 @@ function apriPrev(id){
   document.getElementById('optCondPerLocale').checked=optCondPerLocale;
   document.getElementById('pMdoGenCard').style.display = optMdoPerLocale ? 'none' : '';
   aggiornaVisibilitaStato();
-  locali=(p.locali||[]).map(l=>({...l, lavori:[...(l.lavori||[])], lavoriPrezzi:{...(l.lavoriPrezzi||{})}, lavoriQta:{...(l.lavoriQta||{})}, condizioni:[...(l.condizioni||[])]}));
+  locali=(p.locali||[]).map(l=>({...l, lavori:[...(l.lavori||[])], lavoriPrezzi:{...(l.lavoriPrezzi||{})}, lavoriQta:{...(l.lavoriQta||{})}, serramenti:copiaSerramenti(l), condizioni:[...(l.condizioni||[])]}));
   locCnt=locali.length?Math.max(...locali.map(l=>l.id))+1:0;
   condizioni=(p.condizioniGen||[]).slice();
   document.getElementById('pCondNote').value=p.condNoteGen||'';
@@ -1537,6 +1844,25 @@ function buildAntHTML(d){
 
   const righeLocali = locs.map(loc=>{
     const conQta=cfgMestiere(d.mestiere).quantita;
+    // Serramenti (solo serramentista): riga con disegno tecnico + descrizione.
+    const serrRows=(cfgMestiere(d.mestiere).serramenti?(loc.serramenti||[]):[]).map(s=>{
+      const q=parseFloat(s.qta)||1;
+      const tot=q*(parseFloat(s.prezzo)||0);
+      const ap=[];
+      for(let i=0;i<Math.min(Math.max(parseInt(s.ante)||1,1),4);i++) ap.push(aperturaLbl((s.aperture||[])[i]||'fissa'));
+      return `<tr class="no-break">
+        <td style="padding:.5em .6em;border-bottom:1px solid #E4E7EC">
+          <div style="display:flex;gap:10px;align-items:center">
+            <div style="flex-shrink:0">${disegnoSerramento(s,86,86)}</div>
+            <div>
+              <div style="font-weight:600">${tipoSerrLbl(s.tipo)} ${Math.round(s.lung||0)}×${Math.round(s.alt||0)} mm${q>1?` <span style="color:#6B7280;font-weight:400">×${q}${(parseFloat(s.prezzo)||0)>0?` @ €${(parseFloat(s.prezzo)||0).toFixed(2)}`:''}</span>`:''}</div>
+              <div style="font-size:.8em;color:#6B7280">${ap.join(' + ')}${s.note?` · ${esc(s.note)}`:''}</div>
+            </div>
+          </div>
+        </td>
+        <td style="padding:.5em .6em;border-bottom:1px solid #E4E7EC;text-align:right;white-space:nowrap;vertical-align:middle">${tot>0?'€'+tot.toFixed(2):''}</td>
+      </tr>`;
+    }).join('');
     const lavRows=(loc.lavori||[]).map(n=>{
       const prezzo=(loc.lavoriPrezzi||{})[n]||0;
       const qta=qtaOf(loc,n);
@@ -1560,7 +1886,7 @@ function buildAntHTML(d){
           ${esc(loc.nome)}${mestiereHaSuperficie(d.mestiere)?` <span style="font-weight:400;color:#6B7280">(${supLoc(loc).toFixed(1)} m²)</span>`:''}
         </td>
       </tr>
-      ${lavRows || mdoRow ? lavRows+mdoRow : `<tr><td colspan="2" style="padding:.4em .6em;color:#9CA3AF;font-style:italic">Nessuna lavorazione con prezzo</td></tr>`}
+      ${serrRows || lavRows || mdoRow ? serrRows+lavRows+mdoRow : `<tr><td colspan="2" style="padding:.4em .6em;color:#9CA3AF;font-style:italic">Nessuna lavorazione con prezzo</td></tr>`}
       ${loc.materiali?`<tr><td colspan="2" style="padding:.3em .6em;font-size:.85em;color:#6B7280">Materiali: ${esc(loc.materiali)}${condTxt}</td></tr>`:(condTxt?`<tr><td colspan="2" style="padding:.3em .6em">${condTxt}</td></tr>`:'')}
     `;
   }).join('');
@@ -1649,13 +1975,27 @@ function sBuildAntHTML(d){
   const righeLocali = locs.map(loc=>{
     const _q=cfgMestiere(d.mestiere).quantita;
     const lavTxt=(loc.lavori||[]).map(n=>_q?`${esc(n)} ×${(+qtaOf(loc,n).toFixed(2))}`:esc(n)).join(', ')||'—';
+    // Serramenti rilevati (solo serramentista): disegno + misure, senza prezzi.
+    const serrTxt=(cfgMestiere(d.mestiere).serramenti?(loc.serramenti||[]):[]).map(s=>{
+      const q=parseFloat(s.qta)||1;
+      const ap=[];
+      for(let i=0;i<Math.min(Math.max(parseInt(s.ante)||1,1),4);i++) ap.push(aperturaLbl((s.aperture||[])[i]||'fissa'));
+      return `<div style="display:flex;gap:10px;align-items:center;margin:4px 0">
+          <div style="flex-shrink:0">${disegnoSerramento(s,76,76)}</div>
+          <div>
+            <div style="font-weight:600">${tipoSerrLbl(s.tipo)} ${Math.round(s.lung||0)}×${Math.round(s.alt||0)} mm${q>1?` <span style="color:#6B7280;font-weight:400">×${q}</span>`:''}</div>
+            <div style="font-size:11px;color:#6B7280">${ap.join(' + ')}${s.note?` · ${esc(s.note)}`:''}</div>
+          </div>
+        </div>`;
+    }).join('');
     const _condLoc = (loc.condizioni||[]).filter(c=>statoOpzioni(d.mestiere).includes(c));
     const condTxt = (mestiereMostraStato(d.mestiere) && d.condPerLocale) ? [..._condLoc,esc(loc.condNote)].filter(Boolean).join(' · ') : '';
     return `<tr style="background:#F3F4F6">
         <td colspan="2" style="padding:6px 8px;font-weight:700;color:#111827">
           ${esc(loc.nome)}${mestiereHaSuperficie(d.mestiere)?` <span style="font-weight:400;color:#6B7280">(${supLoc(loc).toFixed(1)} m² · L${loc.lung}×W${loc.larg}×H${loc.h})</span>`:''}
         </td>
-      </tr>
+      </tr>${serrTxt?`
+      <tr><td style="padding:6px 8px;border-bottom:1px solid #E4E7EC;font-size:12px;color:#6B7280">Serramenti</td><td style="padding:6px 8px;border-bottom:1px solid #E4E7EC;font-size:12px">${serrTxt}</td></tr>`:''}
       <tr><td style="padding:6px 8px;border-bottom:1px solid #E4E7EC;font-size:12px;color:#6B7280">Lavori</td><td style="padding:6px 8px;border-bottom:1px solid #E4E7EC;font-size:12px">${lavTxt}</td></tr>
       ${loc.materiali?`<tr><td style="padding:6px 8px;border-bottom:1px solid #E4E7EC;font-size:12px;color:#6B7280">Materiali</td><td style="padding:6px 8px;border-bottom:1px solid #E4E7EC;font-size:12px">${esc(loc.materiali)}</td></tr>`:''}
       ${condTxt?`<tr><td style="padding:6px 8px;border-bottom:1px solid #E4E7EC;font-size:12px;color:#6B7280">Condizioni</td><td style="padding:6px 8px;border-bottom:1px solid #E4E7EC;font-size:12px">${condTxt}</td></tr>`:''}
@@ -1716,7 +2056,7 @@ function sEsportaPDF(){
     mestiere: mestiere,
     tipoStruttura: sTipoStruttura,
     cliente:{nome,cognome:document.getElementById('sCognome').value,tel:document.getElementById('sTel').value,email:document.getElementById('sEmail').value,indirizzo:document.getElementById('sIndirizzo').value},
-    locali: sLocali.map(l=>({...l,lavori:[...l.lavori],lavoriQta:{...(l.lavoriQta||{})},condizioni:[...(l.condizioni||[])]})),
+    locali: sLocali.map(l=>({...l,lavori:[...l.lavori],lavoriQta:{...(l.lavoriQta||{})},serramenti:copiaSerramenti(l),condizioni:[...(l.condizioni||[])]})),
     supTot: sLocali.reduce((s,l)=>s+supLoc(l),0),
     condizioniGen: sCondizioni.slice(),
     condNoteGen: document.getElementById('sCondNote').value,
@@ -1810,6 +2150,9 @@ function elimina(id){
   if(!confirm('Eliminare questo preventivo?'))return;
   preventivi=preventivi.filter(p=>String(p.id)!==String(id));
   Store.savePreventivi(preventivi);
+  // Se era il preventivo aperto nell'editor, azzera anche il form: altrimenti
+  // l'auto-salvataggio lo farebbe "risorgere" al prossimo tocco su un campo.
+  if(String(id)===String(editId)) resetForm(true);
   renderLista(); aggStats();
 }
 
@@ -1854,7 +2197,7 @@ function importaBackup(file){
       if(Array.isArray(data.preventivi)) preventivi=data.preventivi;
       if(Array.isArray(data.sopralluoghi)) sopralluoghi=data.sopralluoghi;
       if(data.impresa && typeof data.impresa==='object') impresa=data.impresa;
-      if(typeof data.mestiere==='string') mestiere=data.mestiere;
+      if(typeof data.mestiere==='string' && MESTIERI[data.mestiere]) mestiere=data.mestiere;
       if(data.lavoriCustom && typeof data.lavoriCustom==='object') lavoriCustom=data.lavoriCustom;
       Store.savePreventivi(preventivi);
       Store.saveSopralluoghi(sopralluoghi);
