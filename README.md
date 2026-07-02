@@ -47,11 +47,14 @@ Punti chiave di `app.js`:
 
 ## Dati e privacy
 
-I dati stanno **solo sul dispositivo** (`localStorage`). Il login Firebase è
-per ora solo un "cancello" di accesso: non sincronizza nulla e i documenti
-restano visibili a chiunque usi il dispositivo (il logout lo dice
-esplicitamente). Il collegamento dei dati al cloud è il passo successivo.
-Backup manuale: esporta/ripristina JSON dalla pagina Impostazioni.
+L'app è **locale-first**: i dati vivono nel `localStorage` del dispositivo e
+tutto funziona anche offline. Con il login, i dati si **sincronizzano sul
+cloud** (Firestore, `users/{uid}/app/dati`) come specchio per-utente: fusione
+per id senza perdite, eliminazioni ricordate con tombstone, migrazione
+automatica dei dati locali al primo login. La sync richiede le regole di
+`firestore.rules` pubblicate (vedi `DA-FARE.md`); finché non lo sono, l'app
+resta locale e lo stato è visibile nel menu account. Backup manuale:
+esporta/ripristina JSON dalla pagina Impostazioni.
 
 ## Test
 

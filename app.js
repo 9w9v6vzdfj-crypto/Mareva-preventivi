@@ -21,7 +21,11 @@ function _authBusy(on){
   const b=_authEl('authBusy'); if(b) b.style.display = on ? 'block' : 'none';
   ['btnAccedi','btnCrea','btnGoogle'].forEach(i=>{ const el=_authEl(i); if(el) el.disabled = on; });
 }
-function _authMsg(t){ const e=_authEl('authError'); if(e) e.textContent = t || ''; }
+function _authMsg(t, ok){
+  const e=_authEl('authError'); if(!e) return;
+  e.textContent = t || '';
+  e.style.color = ok ? 'var(--green)' : '';
+}
 function mostraGate(){ const g=_authEl('authGate'); if(g) g.style.display='flex'; }
 function mostraApp(){ const g=_authEl('authGate'); if(g) g.style.display='none'; }
 
@@ -40,7 +44,10 @@ function _authErrore(err){
     'auth/popup-closed-by-user':'Accesso annullato.',
     'auth/popup-blocked':'Il browser ha bloccato la finestra di Google. Riprova.',
     'auth/network-request-failed':'Nessuna connessione. Controlla la rete.',
-    'auth/operation-not-allowed':'Metodo di accesso non abilitato nel progetto Firebase.'
+    'auth/operation-not-allowed':'Metodo di accesso non abilitato nel progetto Firebase.',
+    'auth/unauthorized-domain':'Dominio del sito non autorizzato. In Firebase Console: Authentication → Settings → Authorized domains → aggiungi il dominio di questa pagina.',
+    'auth/missing-email':'Inserisci la tua email.',
+    'auth/user-disabled':'Questo account è stato disabilitato.'
   };
   _authMsg(map[code] || ('Errore: ' + ((err && err.message) ? err.message : code)));
 }
@@ -63,6 +70,15 @@ function accedi(){
   if(!email || !pw){ _authMsg('Inserisci email e password.'); return; }
   _authMsg(''); _authBusy(true);
   firebase.auth().signInWithEmailAndPassword(email, pw).catch(_authErrore);
+}
+function recuperaPassword(){
+  if(typeof firebase==='undefined' || !firebase.auth) return;
+  const email=(_authEl('authEmail').value||'').trim();
+  if(!email){ _authMsg('Scrivi la tua email nel campo qui sopra, poi tocca di nuovo "Password dimenticata?".'); return; }
+  _authMsg(''); _authBusy(true);
+  firebase.auth().sendPasswordResetEmail(email)
+    .then(function(){ _authBusy(false); _authMsg('📧 Email inviata a '+email+': apri il link per reimpostare la password.', true); })
+    .catch(_authErrore);
 }
 function accediGoogle(){
   if(typeof firebase==='undefined' || !firebase.auth) return;
@@ -107,8 +123,10 @@ document.addEventListener('click', function(){
         _justCreated = false;
         setTimeout(function(){ alert('✅ Account creato con successo!\nBenvenuto in Facile Preventivo.'); }, 300);
       }
-      // (Passo successivo della Fase 3: qui caricheremo i dati dell'utente dal cloud)
+      // Fase 3: dati dell'account sul cloud (se le regole Firestore sono pubblicate)
+      Sync.avvia();
     }else{
+      Sync.spegni();
       mostraGate();
     }
   });
@@ -340,7 +358,7 @@ const PAGE_TITLES={dashboard:'Home',sopralluogo:'Sopralluogo',nuovo:'Preventivo'
 //  il resto dell'app non sa né dove né come i dati sono salvati.
 // ══════════════════════════════════════════════════════════
 const Store = {
-  KEYS: { prev:'mv_prev', sop:'mv_sop', impresa:'mv_impresa', mestiere:'mv_mestiere', lavoriCustom:'mv_lavori_custom' },
+  KEYS: { prev:'mv_prev', sop:'mv_sop', impresa:'mv_impresa', mestiere:'mv_mestiere', lavoriCustom:'mv_lavori_custom', del:'mv_del', mod:'mv_mod' },
 
   // -- uso interno: leggi un valore JSON in modo sicuro (se corrotto, usa il fallback) --
   _read(key, fallback){
@@ -357,12 +375,19 @@ const Store = {
     return v==null ? fallback : v;
   },
   // -- uso interno: scrivi un valore (avvisa se la memoria è piena) --
+  // Ogni scrittura aggiorna il "timestamp di modifica locale" (per il
+  // confronto col cloud) e mette in coda una sincronizzazione.
   _write(key, value){
-    try{ localStorage.setItem(key, typeof value==='string' ? value : JSON.stringify(value)); return true; }
+    try{ localStorage.setItem(key, typeof value==='string' ? value : JSON.stringify(value)); }
     catch(e){
       alert('⚠️ Memoria piena: impossibile salvare.\nElimina qualche vecchio documento dall\'Archivio, poi riprova.');
       return false;
     }
+    if(key!==this.KEYS.mod){
+      try{ localStorage.setItem(this.KEYS.mod, String(Date.now())); }catch(e){}
+      Sync.schedule();
+    }
+    return true;
   },
 
   // -- metodi per ciascun tipo di dato: questi li usa il resto dell'app --
@@ -379,7 +404,187 @@ const Store = {
   saveLavoriCustom(obj){ return this._write(this.KEYS.lavoriCustom, obj); },
 
   getMestiere(){ return this._readRaw(this.KEYS.mestiere, 'imbianchino'); },
-  setMestiere(m){ return this._write(this.KEYS.mestiere, m); }
+  setMestiere(m){ return this._write(this.KEYS.mestiere, m); },
+
+  // Tombstone delle eliminazioni: senza, la sincronizzazione "risusciterebbe"
+  // dal cloud i documenti cancellati su questo dispositivo.
+  loadDel(){ const d=this._read(this.KEYS.del, {}); return {prev:d.prev||[], sop:d.sop||[]}; },
+  saveDel(d){ return this._write(this.KEYS.del, d); },
+  segnaEliminato(tipo, id){
+    const d=this.loadDel();
+    d[tipo]=[...(d[tipo]||[]), {id:String(id), ts:Date.now()}].slice(-300);
+    this.saveDel(d);
+  },
+
+  getMod(){ return parseInt(this._readRaw(this.KEYS.mod,'0'),10)||0; }
+};
+
+// ══════════════════════════════════════════════════════════
+//  SYNC — dati dell'account sul cloud (Firestore)
+//  Locale-first: l'app lavora SEMPRE sul localStorage; il cloud è uno
+//  specchio per-utente (users/{uid}/app/dati). Se Firestore non è
+//  raggiungibile o le regole non sono ancora pubblicate, tutto continua
+//  a funzionare in locale e lo stato è visibile nel menu account.
+//  Le regole da pubblicare sono nel file firestore.rules (vedi DA-FARE.md).
+// ══════════════════════════════════════════════════════════
+
+// Unione di due elenchi di documenti per id: vince chi ha `mod` più alto
+// (a parità vince il locale: è il dispositivo in mano all'utente).
+function mergeById(locale, remoto){
+  const m=new Map();
+  (remoto||[]).forEach(x=>{ if(x && x.id!=null) m.set(String(x.id), x); });
+  (locale||[]).forEach(x=>{
+    if(!x || x.id==null) return;
+    const y=m.get(String(x.id));
+    if(!y || (x.mod||0)>=(y.mod||0)) m.set(String(x.id), x);
+  });
+  return [...m.values()];
+}
+// Applica i tombstone: un documento eliminato resta eliminato, a meno che
+// sia stato modificato DOPO l'eliminazione (mod più recente del tombstone).
+function applicaTombstone(arr, dels){
+  const m=new Map((dels||[]).map(t=>[String(t.id), t.ts||0]));
+  return (arr||[]).filter(x=>{
+    const ts=m.get(String(x.id));
+    return !(ts!==undefined && ts>=(x.mod||0));
+  });
+}
+// Unione dei tombstone (per id, ts più alto).
+function mergeDel(a, b){
+  const m=new Map();
+  [...(a||[]),...(b||[])].forEach(t=>{
+    if(!t || t.id==null) return;
+    const y=m.get(String(t.id));
+    if(!y || (t.ts||0)>(y.ts||0)) m.set(String(t.id), t);
+  });
+  return [...m.values()].slice(-300);
+}
+
+const Sync = {
+  attivo:false, _timer:null, ultimo:null,
+
+  _db(){
+    try{ return (typeof firebase!=='undefined' && firebase.firestore) ? firebase.firestore() : null; }
+    catch(e){ return null; }
+  },
+  _ref(){
+    const db=this._db();
+    if(!db || !currentUser) return null;
+    return db.collection('users').doc(currentUser.uid).collection('app').doc('dati');
+  },
+
+  _setStato(s){
+    const el=document.getElementById('syncStato');
+    if(!el) return;
+    const testi={
+      ok: '☁️ Sincronizzato'+(this.ultimo?(' · '+this.ultimo.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})):''),
+      lavoro: '☁️ Sincronizzazione…',
+      regole: '⚠️ Cloud non attivo: pubblica le regole Firestore (vedi DA-FARE.md)',
+      errore: '⚠️ Errore di sincronizzazione: riprovo al prossimo salvataggio',
+      pieno: '⚠️ Dati troppo grandi per il cloud: esporta un backup',
+      off: '📴 Solo su questo dispositivo'
+    };
+    el.textContent = testi[s] || testi.off;
+  },
+
+  // Avvio dopo il login: scarica il cloud, unisce, risale l'unione.
+  avvia(){
+    const ref=this._ref();
+    if(!ref){ this.attivo=false; this._setStato('off'); return; }
+    this._setStato('lavoro');
+    const self=this;
+    ref.get().then(function(snap){
+      if(snap.exists){
+        const dati=snap.data()||{};
+        let remoto={};
+        try{ remoto=JSON.parse(dati.json||'{}'); }catch(e){ remoto={}; }
+        self._unisci(remoto, dati.aggiornato||0);
+      }
+      self.attivo=true;
+      return self._push();
+    }).catch(function(e){
+      self.attivo=false;
+      self._setStato(e && e.code==='permission-denied' ? 'regole' : 'errore');
+    });
+  },
+  spegni(){
+    this.attivo=false;
+    clearTimeout(this._timer);
+    this._setStato('off');
+  },
+
+  // Fusione cloud+locale: documenti uniti per id (nessuna perdita),
+  // impostazioni con "vince il più recente" tra dispositivo e cloud.
+  _unisci(remoto, aggiornatoCloud){
+    const del={
+      prev: mergeDel(Store.loadDel().prev, (remoto.del||{}).prev),
+      sop:  mergeDel(Store.loadDel().sop,  (remoto.del||{}).sop)
+    };
+    preventivi   = applicaTombstone(mergeById(preventivi,   remoto.prev), del.prev);
+    sopralluoghi = applicaTombstone(mergeById(sopralluoghi, remoto.sop),  del.sop);
+    const cloudPiuRecente = (aggiornatoCloud||0) > Store.getMod();
+    if(cloudPiuRecente){
+      if(remoto.impresa && typeof remoto.impresa==='object') impresa=remoto.impresa;
+      if(typeof remoto.mestiere==='string' && MESTIERI[remoto.mestiere]) mestiere=remoto.mestiere;
+    }
+    // lavori personalizzati: unione per mestiere (mai perdite)
+    if(remoto.lavoriCustom && typeof remoto.lavoriCustom==='object'){
+      Object.keys(remoto.lavoriCustom).forEach(k=>{
+        lavoriCustom[k]=[...new Set([...(lavoriCustom[k]||[]), ...(remoto.lavoriCustom[k]||[])])];
+      });
+    }
+    Store.savePreventivi(preventivi);
+    Store.saveSopralluoghi(sopralluoghi);
+    Store.saveImpresa(impresa);
+    Store.setMestiere(mestiere);
+    Store.saveLavoriCustom(lavoriCustom);
+    Store.saveDel(del);
+    // aggiorna la UI con i dati fusi
+    caricaImpresa();
+    applyMestiereUI();
+    aggStats();
+    const pl=document.getElementById('page-lista');
+    if(pl && pl.classList.contains('active')) renderLista();
+  },
+
+  _push(){
+    const ref=this._ref();
+    if(!ref || !this.attivo) return Promise.resolve();
+    const json=JSON.stringify({
+      prev:preventivi, sop:sopralluoghi, impresa, mestiere, lavoriCustom, del:Store.loadDel()
+    });
+    if(json.length>900000){ this._setStato('pieno'); return Promise.resolve(); }
+    const self=this;
+    return ref.set({v:1, aggiornato:Date.now(), json}).then(function(){
+      self.ultimo=new Date();
+      self._setStato('ok');
+    });
+  },
+
+  // Chiamata a ogni scrittura dello Store: spinge sul cloud con calma (3s),
+  // così una raffica di modifiche diventa un solo salvataggio.
+  schedule(){
+    if(!this.attivo) return;
+    clearTimeout(this._timer);
+    const self=this;
+    this._timer=setTimeout(function(){
+      self._push().catch(function(e){
+        self._setStato(e && e.code==='permission-denied' ? 'regole' : 'errore');
+      });
+    }, 3000);
+  },
+
+  // Bottone "Sincronizza ora" nel menu account: se la sync non è mai
+  // partita (es. regole appena pubblicate) riprova da capo.
+  ora(){
+    const m=document.getElementById('accountMenu'); if(m) m.style.display='none';
+    if(!this.attivo){ this.avvia(); return; }
+    const self=this;
+    this._setStato('lavoro');
+    this._push().catch(function(e){
+      self._setStato(e && e.code==='permission-denied' ? 'regole' : 'errore');
+    });
+  }
 };
 // Escape HTML per evitare XSS quando si interpolano dati utente nei template.
 function esc(s){
@@ -1707,6 +1912,7 @@ function sSalva(ev){
     condNoteGen: document.getElementById('sCondNote').value,
     condPerLocale: sOptCondPerLocale,
     moduli: sModuli.slice(),
+    mod: Date.now(),
     note: document.getElementById('sNote').value,
     convertito: existing ? !!existing.convertito : false
   };
@@ -1759,6 +1965,7 @@ function eliminaSopralluogo(id){
   if(!confirm('Eliminare questo sopralluogo?'))return;
   sopralluoghi=sopralluoghi.filter(s=>String(s.id)!==String(id));
   Store.saveSopralluoghi(sopralluoghi);
+  Store.segnaEliminato('sop', id); // per la sync: eliminato anche sul cloud
   // Come in elimina(): se era aperto nell'editor, azzera il form per non
   // ricrearlo al prossimo "Salva".
   if(String(id)===String(sEditId)) sResetForm(true);
@@ -1787,6 +1994,7 @@ function sConvertiInPreventivo(){
     condNoteGen: document.getElementById('sCondNote').value,
     condPerLocale: sOptCondPerLocale,
     moduli: sModuli.slice(),
+    mod: Date.now(),
     note: document.getElementById('sNote').value,
     convertito:true
   };
@@ -1904,6 +2112,7 @@ function getDati(){
     supTot: locali.reduce((s,l)=>s+supLoc(l),0),
     optMdoPerLocale, optCondPerLocale,
     moduli: pModuli.slice(),
+    mod: Date.now(),
     mdoGenerale: parseFloat(document.getElementById('mdoGenerale').value)||0,
     sconto:parseFloat(document.getElementById('sconto').value)||0,
     iva:(()=>{const v=parseFloat(document.getElementById('iva').value);return Number.isFinite(v)?v:22;})(),
@@ -2323,6 +2532,7 @@ function sEsportaPDF(){
     condNoteGen: document.getElementById('sCondNote').value,
     condPerLocale: sOptCondPerLocale,
     moduli: sModuli.slice(),
+    mod: Date.now(),
     note: document.getElementById('sNote').value,
     convertito: existing ? !!existing.convertito : false
   };
@@ -2406,7 +2616,7 @@ function prevItemHTML(p,compact){
 
 function cambiaStato(id,stato){
   const p=preventivi.find(p=>String(p.id)===String(id));
-  if(p){p.stato=stato; if(String(p.id)===String(editId)) currentStato=stato; Store.savePreventivi(preventivi);aggStats();}
+  if(p){p.stato=stato; p.mod=Date.now(); if(String(p.id)===String(editId)) currentStato=stato; Store.savePreventivi(preventivi);aggStats();}
 }
 
 // Duplica un preventivo: nuova numerazione, data di oggi, stato bozza.
@@ -2420,6 +2630,7 @@ function duplicaPrev(id){
   copia.data=new Date().toLocaleDateString('it-IT');
   copia.dataISO=new Date().toISOString();
   copia.stato='bozza';
+  copia.mod=Date.now();
   preventivi.push(copia);
   Store.savePreventivi(preventivi);
   apriPrev(copia.id);
@@ -2429,6 +2640,7 @@ function elimina(id){
   if(!confirm('Eliminare questo preventivo?'))return;
   preventivi=preventivi.filter(p=>String(p.id)!==String(id));
   Store.savePreventivi(preventivi);
+  Store.segnaEliminato('prev', id); // per la sync: eliminato anche sul cloud
   // Se era il preventivo aperto nell'editor, azzera anche il form: altrimenti
   // l'auto-salvataggio lo farebbe "risorgere" al prossimo tocco su un campo.
   if(String(id)===String(editId)) resetForm(true);

@@ -25,6 +25,8 @@
     <div class="field"><label class="label">Password</label>
       <input class="input" id="authPw" type="password" autocomplete="current-password" placeholder="almeno 6 caratteri"></div>
 
+    <button class="auth-link" onclick="recuperaPassword()">Password dimenticata?</button>
+
     <div id="authError" class="auth-error"></div>
 
     <button class="btn btn-primary btn-full" id="btnAccedi" onclick="accedi()">Accedi</button>
@@ -48,6 +50,8 @@
     </button>
     <div class="account-menu" id="accountMenu" onclick="event.stopPropagation()">
       <div class="account-menu-email" id="accountEmail">—</div>
+      <div class="account-menu-sync" id="syncStato">📴 Solo su questo dispositivo</div>
+      <button class="account-menu-item" onclick="Sync.ora()">🔄 Sincronizza ora</button>
       <button class="account-menu-item" onclick="esci()">↩&nbsp; Esci</button>
     </div>
   </div>
@@ -506,6 +510,7 @@
 <!-- Firebase Auth (SDK "compat" da CDN — nessun build step, va su GitHub Pages) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

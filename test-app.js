@@ -198,5 +198,23 @@ try {
   check('Cambio mestiere: voci conservate come modulo (no perdita dati)', ok, JSON.stringify(r));
 } catch (e) { check('Cambio mestiere: voci conservate come modulo (no perdita dati)', false, e.message); }
 
+// 9) Sync: fusione documenti per id (vince il piu' recente, pari merito al
+//    locale) e tombstone (gli eliminati non "risorgono" dal cloud).
+try {
+  const sb = loadApp({});
+  const locale = [{ id: 1, mod: 10, n: 'a-locale' }, { id: 2, mod: 5, n: 'b-locale' }];
+  const cloud = [{ id: 2, mod: 9, n: 'b-cloud' }, { id: 3, mod: 1, n: 'c-cloud' }, { id: 4, mod: 7, n: 'd-cloud' }];
+  const fusi = sb.mergeById(locale, cloud);
+  const byId = Object.fromEntries(fusi.map(x => [x.id, x.n]));
+  const dels = [{ id: '3', ts: 2 }, { id: '4', ts: 3 }]; // 3 eliminato dopo la modifica, 4 rimodificato dopo (mod 7 > ts 3)
+  const vivi = sb.applicaTombstone(fusi, dels).map(x => x.id).sort().join(',');
+  const delFusi = sb.mergeDel([{ id: '9', ts: 1 }], [{ id: '9', ts: 4 }, { id: '8', ts: 2 }]);
+  const ok = fusi.length === 4
+    && byId[1] === 'a-locale' && byId[2] === 'b-cloud' && byId[3] === 'c-cloud'
+    && vivi === '1,2,4'
+    && delFusi.length === 2 && delFusi.find(t => t.id === '9').ts === 4;
+  check('Sync: fusione per id e tombstone eliminazioni', ok, `fusi=${JSON.stringify(byId)} vivi=${vivi}`);
+} catch (e) { check('Sync: fusione per id e tombstone eliminazioni', false, e.message); }
+
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);
