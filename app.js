@@ -261,6 +261,13 @@ function esc(s){
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+// Escape per valori utente dentro una stringa JS a apici singoli in un
+// attributo onclick/onchange: prima escape JS (\ e '), poi escape HTML
+// dell'attributo. L'HTML dell'attributo viene decodificato prima di eseguire
+// il JS, quindi l'ordine e' importante.
+function escJs(s){
+  return esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
+}
 
 // Liste personalizzabili (lavori extra aggiunti dall'utente), salvate per mestiere
 let lavoriCustom = Store.loadLavoriCustom();
@@ -703,7 +710,7 @@ function buildLocCard(prefix, loc){
       <div class="locale-hdr-l">
         <div class="locale-emoji">${e}</div>
         <div style="min-width:0;flex:1">
-          <input class="locale-hdr-name" value="${loc.nome}" onclick="event.stopPropagation()" oninput="${prefix}RenameLocale(${loc.id},this.value)">
+          <input class="locale-hdr-name" value="${esc(loc.nome)}" onclick="event.stopPropagation()" oninput="${prefix}RenameLocale(${loc.id},this.value)">
           <div class="locale-hdr-sub" id="${prefix}hdr-sub-${loc.id}">${sub}</div>
         </div>
       </div>
@@ -802,7 +809,7 @@ function locBodyHTML(prefix, loc){
     <div class="section-lbl">Materiali previsti</div>
     <div class="field" style="margin-bottom:0">
       <textarea class="textarea" placeholder="${materialiPh(mestiere)}" rows="2"
-        oninput="${prefix}SetMateriali(${loc.id},this.value)">${loc.materiali||''}</textarea>
+        oninput="${prefix}SetMateriali(${loc.id},this.value)">${esc(loc.materiali||'')}</textarea>
     </div>
 
     ${(condPerLocale && mestiereMostraStato(mestiere))?`
@@ -818,7 +825,7 @@ function locBodyHTML(prefix, loc){
     </div>
     <div class="field" style="margin-top:8px;margin-bottom:0">
       <textarea class="textarea" placeholder="${statoCfg(mestiere).noteLocPh}" rows="2"
-        oninput="${prefix}SetCondNote(${loc.id},this.value)">${loc.condNote||''}</textarea>
+        oninput="${prefix}SetCondNote(${loc.id},this.value)">${esc(loc.condNote||'')}</textarea>
     </div>`:''}
 
     ${(prefix==='p' && optMdoPerLocale)?`
@@ -877,8 +884,8 @@ function renderLavoriList(prefix,id){
     const lista=lavoriList(mestiere);
     checks.innerHTML=lista.map(n=>`
       <label class="check-item${loc.lavori.includes(n)?' on':''}">
-        <input type="checkbox" ${loc.lavori.includes(n)?'checked':''} onchange="${prefix}ToggleLavoro(${id},'${n.replace(/'/g,"\\'")}')">
-        <span>${n}</span>
+        <input type="checkbox" ${loc.lavori.includes(n)?'checked':''} onchange="${prefix}ToggleLavoro(${id},'${escJs(n)}')">
+        <span>${esc(n)}</span>
       </label>`).join('');
   }
   // Mestieri freetext: scorciatoie (suggerite + già digitate) non ancora selezionate
@@ -886,7 +893,7 @@ function renderLavoriList(prefix,id){
   if(quick){
     const base=[...(cfgMestiere(mestiere).suggeriti||[]), ...(lavoriCustom[mestiere]||[])];
     const usati=[...new Set(base)].filter(n=>!loc.lavori.includes(n));
-    quick.innerHTML=usati.map(n=>`<button class="chip-add" onclick="${prefix}ToggleLavoro(${id},'${n.replace(/'/g,"\\'")}')">+ ${n}</button>`).join('');
+    quick.innerHTML=usati.map(n=>`<button class="chip-add" onclick="${prefix}ToggleLavoro(${id},'${escJs(n)}')">+ ${esc(n)}</button>`).join('');
   }
   const list=document.getElementById(prefix+'lavlist-'+id);
   if(list){
@@ -897,41 +904,41 @@ function renderLavoriList(prefix,id){
       list.innerHTML=`<div style="margin-top:8px">${loc.lavori.map(n=>`
         <div class="lavoro-rowq">
           <div class="lavoro-rowq-top">
-            <span class="lavoro-nome">${n}</span>
-            <button class="btn-danger" onclick="sToggleLavoro(${id},'${n.replace(/'/g,"\\'")}')">✕</button>
+            <span class="lavoro-nome">${esc(n)}</span>
+            <button class="btn-danger" onclick="sToggleLavoro(${id},'${escJs(n)}')">✕</button>
           </div>
           <div class="lavoro-rowq-bot">
             <span class="qlbl">Quantità</span>
             <div class="qstep">
-              <button type="button" class="qstep-btn" onclick="sStepQta(${id},'${n.replace(/'/g,"\\'")}',-1)">−</button>
+              <button type="button" class="qstep-btn" onclick="sStepQta(${id},'${escJs(n)}',-1)">−</button>
               <input class="qbox qbox-step" type="number" inputmode="numeric" min="1" step="1"
-                value="${qtaOf(loc,n)}" oninput="sSetLavoroQta(${id},'${n.replace(/'/g,"\\'")}',this.value)">
-              <button type="button" class="qstep-btn" onclick="sStepQta(${id},'${n.replace(/'/g,"\\'")}',1)">+</button>
+                value="${qtaOf(loc,n)}" oninput="sSetLavoroQta(${id},'${escJs(n)}',this.value)">
+              <button type="button" class="qstep-btn" onclick="sStepQta(${id},'${escJs(n)}',1)">+</button>
             </div>
           </div>
         </div>`).join('')}</div>`;
     } else if(prefix==='s'){
       list.innerHTML=`<div class="chip-row">${loc.lavori.map(n=>`
-        <span class="chip">${n}<button onclick="sToggleLavoro(${id},'${n.replace(/'/g,"\\'")}')">✕</button></span>`).join('')}</div>`;
+        <span class="chip">${esc(n)}<button onclick="sToggleLavoro(${id},'${escJs(n)}')">✕</button></span>`).join('')}</div>`;
     } else if(cfgMestiere(mestiere).quantita){
       // preventivo CON quantità: Q.tà (con −/+) × Prezzo = Totale
       list.innerHTML=`<div style="margin-top:8px">${loc.lavori.map((n,idx)=>`
         <div class="lavoro-rowq">
           <div class="lavoro-rowq-top">
-            <span class="lavoro-nome">${n}</span>
-            <button class="btn-danger" onclick="pToggleLavoro(${id},'${n.replace(/'/g,"\\'")}')">✕</button>
+            <span class="lavoro-nome">${esc(n)}</span>
+            <button class="btn-danger" onclick="pToggleLavoro(${id},'${escJs(n)}')">✕</button>
           </div>
           <div class="lavoro-rowq-bot">
             <div class="qstep">
-              <button type="button" class="qstep-btn" onclick="pStepQta(${id},'${n.replace(/'/g,"\\'")}',-1)">−</button>
+              <button type="button" class="qstep-btn" onclick="pStepQta(${id},'${escJs(n)}',-1)">−</button>
               <input class="qbox qbox-step" type="number" inputmode="numeric" min="1" step="1"
-                value="${qtaOf(loc,n)}" oninput="pSetLavoroQta(${id},'${n.replace(/'/g,"\\'")}',this.value)">
-              <button type="button" class="qstep-btn" onclick="pStepQta(${id},'${n.replace(/'/g,"\\'")}',1)">+</button>
+                value="${qtaOf(loc,n)}" oninput="pSetLavoroQta(${id},'${escJs(n)}',this.value)">
+              <button type="button" class="qstep-btn" onclick="pStepQta(${id},'${escJs(n)}',1)">+</button>
             </div>
             <span class="qmul">×</span>
             <input class="qbox" type="number" inputmode="decimal" min="0" step="0.01" placeholder="€"
               value="${loc.lavoriPrezzi?.[n]||''}"
-              oninput="pSetLavoroPrezzo(${id},'${n.replace(/'/g,"\\'")}',this.value)">
+              oninput="pSetLavoroPrezzo(${id},'${escJs(n)}',this.value)">
             <span class="qeq">=</span>
             <span class="qtot" id="prigatot-${id}-${idx}">€${(qtaOf(loc,n)*((loc.lavoriPrezzi?.[n])||0)).toFixed(2)}</span>
           </div>
@@ -940,11 +947,11 @@ function renderLavoriList(prefix,id){
       // preventivo: ogni lavoro con prezzo
       list.innerHTML=`<div style="margin-top:8px">${loc.lavori.map(n=>`
         <div class="lavoro-row">
-          <span class="lavoro-nome">${n}</span>
+          <span class="lavoro-nome">${esc(n)}</span>
           <input class="input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="€"
             value="${loc.lavoriPrezzi?.[n]||''}"
-            oninput="pSetLavoroPrezzo(${id},'${n.replace(/'/g,"\\'")}',this.value)">
-          <button class="btn-danger" onclick="pToggleLavoro(${id},'${n.replace(/'/g,"\\'")}')">✕</button>
+            oninput="pSetLavoroPrezzo(${id},'${escJs(n)}',this.value)">
+          <button class="btn-danger" onclick="pToggleLavoro(${id},'${escJs(n)}')">✕</button>
         </div>`).join('')}</div>`;
     }
   }

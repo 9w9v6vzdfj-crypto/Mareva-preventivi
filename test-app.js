@@ -102,5 +102,21 @@ for (const trade of ['imbianchino', 'muratore']) {
   } catch (e) { check('PDF ' + trade + ' invariato', false, e.message); }
 }
 
+// 5) Escape HTML: nome locale / materiali con caratteri speciali non devono
+//    rompere il markup della card (XSS via rinomina locale o backup importato).
+try {
+  const sb = loadApp({});
+  boot(sb);
+  const evil = {
+    id: 0, nome: '"><img src=x onerror=1>', lung: 4, larg: 3, h: 2.7,
+    lavori: [], lavoriPrezzi: {}, lavoriQta: {},
+    materiali: '</textarea><script>alert(1)<\/script>',
+    condizioni: [], condNote: '', incPareti: true, incSoffitto: true, _open: true,
+  };
+  const html = sb.buildLocCard('s', evil);
+  const ok = !html.includes('"><img') && !html.includes('<script>');
+  check('Escape HTML nei template dei locali', ok, 'markup non escapato');
+} catch (e) { check('Escape HTML nei template dei locali', false, e.message); }
+
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);
