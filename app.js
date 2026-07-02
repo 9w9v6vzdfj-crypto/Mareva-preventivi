@@ -73,6 +73,9 @@ function accediGoogle(){
 function esci(){
   const m=document.getElementById('accountMenu'); if(m) m.style.display='none';
   if(typeof firebase==='undefined' || !firebase.auth) return;
+  // I dati per ora sono solo locali: usciamo dall'account ma i documenti
+  // restano sul dispositivo. Meglio dirlo chiaramente che farlo in silenzio.
+  if(!confirm('Uscire dall\'account?\nI documenti restano salvati su questo dispositivo e saranno visibili a chiunque lo usi.')) return;
   firebase.auth().signOut();
 }
 function toggleAccountMenu(ev){
@@ -431,28 +434,34 @@ function autoSalva(){
 // ══════════════════════════════════════════════════════════
 //  MESTIERE
 // ══════════════════════════════════════════════════════════
-function setMestiere(m){
+function setMestiere(m, force){
   if(m===mestiere){ applyMestiereUI(); return; }
-  // Se ci sono lavorazioni gia' inserite non compatibili col nuovo mestiere,
-  // chiedi conferma (verranno rimosse insieme ai relativi prezzi/quantita').
-  const newList = lavoriList(m);
-  const allLocs = [...sLocali, ...locali];
-  const hasIncompatible = allLocs.some(loc =>
-    (loc.lavori||[]).some(n => !newList.includes(n))
-  );
-  if(hasIncompatible && !confirm('Cambiando attivita\' le lavorazioni non compatibili saranno rimosse. Continuare?')){
-    applyMestiereUI(); // ripristina la selezione UI senza cambiare mestiere
-    return;
-  }
-  if(hasIncompatible){
-    const clean = loc => {
-      const rimossi = (loc.lavori||[]).filter(n => !newList.includes(n));
-      loc.lavori = (loc.lavori||[]).filter(n => newList.includes(n));
-      if(loc.lavoriPrezzi) rimossi.forEach(n => delete loc.lavoriPrezzi[n]);
-      if(loc.lavoriQta)    rimossi.forEach(n => delete loc.lavoriQta[n]);
-    };
-    sLocali.forEach(clean);
-    locali.forEach(clean);
+  // force=true: apertura di un documento salvato. Niente conferma ne' pulizia:
+  // la verifica riguarda i dati del form corrente, che verranno comunque
+  // sostituiti da quelli del documento. Prima il confirm poteva bloccare
+  // l'apertura e, se annullato, il documento si apriva col mestiere sbagliato.
+  if(!force){
+    // Se ci sono lavorazioni gia' inserite non compatibili col nuovo mestiere,
+    // chiedi conferma (verranno rimosse insieme ai relativi prezzi/quantita').
+    const newList = lavoriList(m);
+    const allLocs = [...sLocali, ...locali];
+    const hasIncompatible = allLocs.some(loc =>
+      (loc.lavori||[]).some(n => !newList.includes(n))
+    );
+    if(hasIncompatible && !confirm('Cambiando attivita\' le lavorazioni non compatibili saranno rimosse. Continuare?')){
+      applyMestiereUI(); // ripristina la selezione UI senza cambiare mestiere
+      return;
+    }
+    if(hasIncompatible){
+      const clean = loc => {
+        const rimossi = (loc.lavori||[]).filter(n => !newList.includes(n));
+        loc.lavori = (loc.lavori||[]).filter(n => newList.includes(n));
+        if(loc.lavoriPrezzi) rimossi.forEach(n => delete loc.lavoriPrezzi[n]);
+        if(loc.lavoriQta)    rimossi.forEach(n => delete loc.lavoriQta[n]);
+      };
+      sLocali.forEach(clean);
+      locali.forEach(clean);
+    }
   }
   mestiere=m;
   Store.setMestiere(m);
@@ -667,7 +676,7 @@ function renderLocaliGeneric(prefix, arr, listId, boxId, valId){
     if((prefix==='s'?optCondLocaleS():optCondPerLocale)) renderCondLocale(prefix,loc.id);
   });
 }
-function optCondLocaleS(){ return optCondPerLocale; } // sopralluogo segue stessa impostazione del preventivo (persistita)
+function optCondLocaleS(){ return optCondPerLocale; } // il sopralluogo segue, nella sessione corrente, lo stesso interruttore del preventivo; l'opzione viene salvata nel documento come condPerLocale
 
 function aggSupTotGeneric(prefix, arr, valId){
   const tot=arr.reduce((s,l)=>s+supLoc(l),0);
@@ -1148,6 +1157,7 @@ function sResetForm(skipConfirm){
 
 function resetForm(skipConfirm){
   if(!skipConfirm && !confirm('Azzerare tutti i dati del preventivo?')) return;
+  clearTimeout(_autoSalvaTimer); // annulla un eventuale auto-salvataggio in coda
   editId=null; locali=[]; locCnt=0; condizioni=[]; pTipoStruttura='Appartamento';
   currentStato='bozza';
   optMdoPerLocale=false; optCondPerLocale=false;
@@ -1202,7 +1212,7 @@ function sSalva(ev){
 function apriSopralluogo(id){
   const s=sopralluoghi.find(s=>String(s.id)===String(id)); if(!s) return;
   sEditId=s.id;
-  if(s.mestiere) setMestiere(s.mestiere);
+  if(s.mestiere) setMestiere(s.mestiere, true);
   goPage('sopralluogo');
   document.getElementById('sopNum').textContent=s.numero;
   document.getElementById('sNome').value=s.cliente?.nome||'';
@@ -1237,6 +1247,9 @@ function eliminaSopralluogo(id){
   if(!confirm('Eliminare questo sopralluogo?'))return;
   sopralluoghi=sopralluoghi.filter(s=>String(s.id)!==String(id));
   Store.saveSopralluoghi(sopralluoghi);
+  // Come in elimina(): se era aperto nell'editor, azzera il form per non
+  // ricrearlo al prossimo "Salva".
+  if(String(id)===String(sEditId)) sResetForm(true);
   aggStats();
 }
 
@@ -1318,7 +1331,7 @@ function renderSopList(){
       <div class="prev-item-top">
         <div>
           <div class="prev-item-name">${mestiereIcona(s.mestiere)} ${esc(s.cliente?.nome||'')} ${esc(s.cliente?.cognome||'')}</div>
-          <div class="prev-item-num">${esc(s.numero)} · ${esc(s.data)} · ${(s.supTot||0).toFixed(1)} m²</div>
+          <div class="prev-item-num">${esc(s.numero)} · ${esc(s.data)}${mestiereHaSuperficie(s.mestiere)?` · ${(s.supTot||0).toFixed(1)} m²`:''}</div>
         </div>
         <span class="badge badge-blue">Da preventivare</span>
       </div>
@@ -1336,7 +1349,7 @@ function renderSopList(){
       <div class="prev-item-top">
         <div>
           <div class="prev-item-name">${mestiereIcona(s.mestiere)} ${esc(s.cliente?.nome||'')} ${esc(s.cliente?.cognome||'')}</div>
-          <div class="prev-item-num">${esc(s.numero)} · ${esc(s.data)} · ${(s.supTot||0).toFixed(1)} m²</div>
+          <div class="prev-item-num">${esc(s.numero)} · ${esc(s.data)}${mestiereHaSuperficie(s.mestiere)?` · ${(s.supTot||0).toFixed(1)} m²`:''}</div>
         </div>
         <span class="badge badge-green">Convertito</span>
       </div>
@@ -1406,7 +1419,7 @@ function apriPrev(id){
   const p=preventivi.find(p=>String(p.id)===String(id)); if(!p) return;
   editId=p.id;
   currentStato=p.stato||'bozza';
-  if(p.mestiere) setMestiere(p.mestiere);
+  if(p.mestiere) setMestiere(p.mestiere, true);
   goPage('nuovo');
   document.getElementById('prevNum').textContent=p.numero;
   document.getElementById('clNome').value=p.cliente?.nome||'';
@@ -1817,6 +1830,9 @@ function elimina(id){
   if(!confirm('Eliminare questo preventivo?'))return;
   preventivi=preventivi.filter(p=>String(p.id)!==String(id));
   Store.savePreventivi(preventivi);
+  // Se era il preventivo aperto nell'editor, azzera anche il form: altrimenti
+  // l'auto-salvataggio lo farebbe "risorgere" al prossimo tocco su un campo.
+  if(String(id)===String(editId)) resetForm(true);
   renderLista(); aggStats();
 }
 
@@ -1861,7 +1877,7 @@ function importaBackup(file){
       if(Array.isArray(data.preventivi)) preventivi=data.preventivi;
       if(Array.isArray(data.sopralluoghi)) sopralluoghi=data.sopralluoghi;
       if(data.impresa && typeof data.impresa==='object') impresa=data.impresa;
-      if(typeof data.mestiere==='string') mestiere=data.mestiere;
+      if(typeof data.mestiere==='string' && MESTIERI[data.mestiere]) mestiere=data.mestiere;
       if(data.lavoriCustom && typeof data.lavoriCustom==='object') lavoriCustom=data.lavoriCustom;
       Store.savePreventivi(preventivi);
       Store.saveSopralluoghi(sopralluoghi);

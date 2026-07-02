@@ -104,8 +104,7 @@ function sampleData(trade) {
     condizioniGen: ['Buono stato'], condNoteGen: 'note generali',
     note: { libere: 'accesso difficile al 3° piano' },
     validita: '60',
-    totale: 0,
-    foto: []
+    totale: 0
   };
 }
 
@@ -125,7 +124,7 @@ const sd = {
   mestiere: trade, tipoStruttura: 'Villa / Casa indipendente',
   cliente: d.cliente, locali: d.locali, supTot: d.supTot,
   condizioniGen: ['Piccole imperfezioni'], condNoteGen: 'nota stato', condPerLocale: true,
-  note: 'note sopralluogo', foto: []
+  note: 'note sopralluogo'
 };
 
 const h = (s) => crypto.createHash('sha256').update(s).digest('hex').slice(0, 16);
