@@ -179,7 +179,9 @@ const LAVORI_MURATORE = [
   'Sostituzione sanitari','Rifacimento bagno completo'
 ];
 // Per il muratore non si usa l'elenco lungo: campo libero + poche scorciatoie.
-const MURATORE_SUGGERITI = ['Demolizioni','Tramezzo cartongesso','Massetto','Posa piastrelle','Intonaco e rasatura','Rifacimento bagno'];
+// Scorciatoie a chip: sottoinsieme (con gli STESSI nomi) di LAVORI_MURATORE,
+// così una voce aggiunta da chip risulta selezionata anche nell'elenco completo.
+const MURATORE_SUGGERITI = ['Demolizione tramezzo','Costruzione tramezzo in cartongesso','Massetto / sottofondo','Posa pavimento / piastrelle','Intonaco e rasatura','Rifacimento bagno completo'];
 
 // Nuovi mestieri: voci con quantità × prezzo unitario.
 const LAVORI_ELETTRICISTA = [
@@ -451,6 +453,7 @@ let mestiere = Store.getMestiere();
 let sLocali=[]; let sLocCnt=0;
 let sTipoStruttura='Appartamento';
 let sCondizioni=[]; // condizioni generali sopralluogo
+let sOptCondPerLocale=false; // condizioni per singolo locale (sopralluogo)
 let sModuli=[];     // moduli di altri mestieri attivi (es. muratore + elettrico)
 let sEditId=null;
 
@@ -577,13 +580,21 @@ function setMestiere(m, force){
   // sostituiti da quelli del documento. Prima il confirm poteva bloccare
   // l'apertura e, se annullato, il documento si apriva col mestiere sbagliato.
   if(!force){
-    // Se ci sono lavorazioni gia' inserite non compatibili col nuovo mestiere,
-    // chiedi conferma (verranno rimosse insieme ai relativi prezzi/quantita').
-    const newList = lavoriList(m);
-    const allLocs = [...sLocali, ...locali];
+    const cfgNew=cfgMestiere(m);
+    const importa=cfgNew.importa||[];
+    const newList=lavoriList(m);
+    // Categoria effettiva di una voce: quella registrata, altrimenti il
+    // mestiere corrente del documento.
+    const catDi=(loc,n)=>(loc.lavoriCat||{})[n]||mestiere;
+    // Una voce e' compatibile col nuovo mestiere se sta nel suo elenco
+    // oppure se la sua categoria e' importabile come modulo (in quel caso
+    // NON viene rimossa: diventa una voce di modulo).
+    const isCompat=(loc,n)=> newList.includes(n) || importa.includes(catDi(loc,n));
+    const serrOk = !!cfgNew.serramenti || importa.includes('serramentista');
+    const allLocs=[...sLocali, ...locali];
     const hasIncompatible = allLocs.some(loc =>
-      (loc.lavori||[]).some(n => !newList.includes(n)) ||
-      (!cfgMestiere(m).serramenti && (loc.serramenti||[]).length)
+      (loc.lavori||[]).some(n => !isCompat(loc,n)) ||
+      (!serrOk && (loc.serramenti||[]).length)
     );
     if(hasIncompatible && !confirm('Cambiando attivita\' le lavorazioni non compatibili saranno rimosse. Continuare?')){
       applyMestiereUI(); // ripristina la selezione UI senza cambiare mestiere
@@ -591,16 +602,37 @@ function setMestiere(m, force){
     }
     if(hasIncompatible){
       const clean = loc => {
-        const rimossi = (loc.lavori||[]).filter(n => !newList.includes(n));
-        loc.lavori = (loc.lavori||[]).filter(n => newList.includes(n));
+        const rimossi = (loc.lavori||[]).filter(n => !isCompat(loc,n));
+        loc.lavori = (loc.lavori||[]).filter(n => isCompat(loc,n));
         if(loc.lavoriPrezzi) rimossi.forEach(n => delete loc.lavoriPrezzi[n]);
         if(loc.lavoriQta)    rimossi.forEach(n => delete loc.lavoriQta[n]);
         if(loc.lavoriCat)    rimossi.forEach(n => delete loc.lavoriCat[n]);
-        if(!cfgMestiere(m).serramenti) loc.serramenti=[];
+        if(!serrOk) loc.serramenti=[];
       };
       sLocali.forEach(clean);
       locali.forEach(clean);
     }
+    // Riclassificazione: le voci importabili vengono taggate con la loro
+    // categoria e il modulo relativo si auto-attiva (es. da elettricista a
+    // muratore: i punti luce restano come modulo ⚡, niente perdita di dati).
+    // Le voci la cui categoria coincide col nuovo mestiere tornano "base".
+    const riclassifica=(arr,mods)=>{
+      arr.forEach(loc=>{
+        (loc.lavori||[]).forEach(n=>{
+          const c=catDi(loc,n);
+          if(c===m){ if(loc.lavoriCat) delete loc.lavoriCat[n]; return; }
+          if(newList.includes(n) && !(loc.lavoriCat||{})[n]) return; // voce del nuovo elenco
+          if(importa.includes(c)){
+            if(!loc.lavoriCat) loc.lavoriCat={};
+            loc.lavoriCat[n]=c;
+            if(!mods.includes(c)) mods.push(c);
+          }
+        });
+        if((loc.serramenti||[]).length && !cfgNew.serramenti && importa.includes('serramentista') && !mods.includes('serramentista')) mods.push('serramentista');
+      });
+    };
+    riclassifica(sLocali,sModuli);
+    riclassifica(locali,pModuli);
   }
   mestiere=m;
   Store.setMestiere(m);
@@ -711,6 +743,13 @@ function toggleModulo(prefix,k,on){
   if(prefix==='s'){ sRenderLocali(); }
   else { pRenderLocali(); ricalcola(); }
 }
+// Apre/chiude il gruppo di chip di un modulo (stato per locale, sopravvive ai re-render).
+function toggleModGroup(prefix,locId,k){
+  const loc=_serrLoc(prefix,locId); if(!loc) return;
+  if(!loc._modOpen) loc._modOpen={};
+  loc._modOpen[k]=!loc._modOpen[k];
+  renderLavoriList(prefix,locId);
+}
 // Aggiunge a un locale una voce importata da un modulo (con categoria).
 function sAddLavoroMod(id,n,cat){ addLavoroModGeneric('s',sLocali,id,n,cat); }
 function pAddLavoroMod(id,n,cat){ addLavoroModGeneric('p',locali,id,n,cat); }
@@ -735,11 +774,12 @@ function addLavoroModGeneric(prefix,arr,id,n,cat){
 // e dalla modalità per-locale (la card generale sparisce se le condizioni sono per locale).
 function aggiornaVisibilitaStato(){
   const mostra = mestiereMostraStato(mestiere);
-  const showGen = mostra && !optCondPerLocale;
-  const sg=document.getElementById('sCondGenCard'); if(sg) sg.style.display = showGen ? '' : 'none';
-  const pg=document.getElementById('pCondGenCard'); if(pg) pg.style.display = showGen ? '' : 'none';
+  // Sopralluogo e preventivo hanno ciascuno il PROPRIO interruttore per-locale.
+  const sg=document.getElementById('sCondGenCard'); if(sg) sg.style.display = (mostra && !sOptCondPerLocale) ? '' : 'none';
+  const pg=document.getElementById('pCondGenCard'); if(pg) pg.style.display = (mostra && !optCondPerLocale) ? '' : 'none';
   const orow=document.getElementById('optCondRow'); if(orow) orow.style.display = mostra ? 'flex' : 'none';
   const odiv=document.getElementById('optCondDivider'); if(odiv) odiv.style.display = mostra ? 'block' : 'none';
+  const scard=document.getElementById('sOptCondCard'); if(scard) scard.style.display = mostra ? '' : 'none';
 }
 
 // ══════════════════════════════════════════════════════════
@@ -853,7 +893,9 @@ function supLoc(loc, mest){
   const s = cfgMestiere(mest || mestiere).superficie;
   if(s==='pareti_soffitto') return supImbianchino(loc);
   if(s==='pavimento'){ const l=loc.lung||0, w=loc.larg||0; return l*w; }
-  return 0; // 'nessuna' / 'opzionale' → nessuna superficie
+  // 'opzionale' (mestiere libero): superficie solo se il locale ha le misure attive.
+  if(s==='opzionale' && loc.conMisure){ const l=loc.lung||0, w=loc.larg||0; return l*w; }
+  return 0; // 'nessuna' → nessuna superficie
 }
 
 // ── SOPRALLUOGO ──
@@ -904,7 +946,7 @@ function renderLocaliGeneric(prefix, arr, listId, boxId, valId){
     if((prefix==='s'?optCondLocaleS():optCondPerLocale)) renderCondLocale(prefix,loc.id);
   });
 }
-function optCondLocaleS(){ return optCondPerLocale; } // il sopralluogo segue, nella sessione corrente, lo stesso interruttore del preventivo; l'opzione viene salvata nel documento come condPerLocale
+function optCondLocaleS(){ return sOptCondPerLocale; } // interruttore proprio del sopralluogo (salvato nel documento come condPerLocale)
 
 function aggSupTotGeneric(prefix, arr, valId){
   const tot=arr.reduce((s,l)=>s+supLoc(l),0);
@@ -918,14 +960,16 @@ function aggSupTotGeneric(prefix, arr, valId){
 function subLocale(loc, aperto){
   const lavCount=(loc.lavori||[]).length;
   const lavTxt = lavCount ? `${lavCount} lavorazion${lavCount===1?'e':'i'}` : '';
+  // Serramenti (nativi o via modulo): contano nel sottotitolo. Se 0, le
+  // stringhe restano identiche a prima per tutti i mestieri.
+  const serrCount = (loc.serramenti||[]).length;
+  const serrTxt = serrCount ? ` · ${serrCount} serrament${serrCount===1?'o':'i'}` : '';
   if(mestiereHaSuperficie(mestiere)){
     const mqTxt=`${supLoc(loc).toFixed(1)} m²`;
     return aperto
-      ? (lavCount ? `${mqTxt} · ${lavTxt}` : mqTxt)
-      : (lavCount ? `${mqTxt} · ${lavTxt} · tocca per modificare` : `${mqTxt} · tocca per misure e lavori`);
+      ? (lavCount ? `${mqTxt} · ${lavTxt}${serrTxt}` : mqTxt+serrTxt)
+      : (lavCount ? `${mqTxt} · ${lavTxt}${serrTxt} · tocca per modificare` : `${mqTxt}${serrTxt} · tocca per misure e lavori`);
   }
-  // Serramentista (o modulo serramenti): nel sottotitolo contano anche i serramenti.
-  const serrCount = (loc.serramenti||[]).length;
   const parti=[];
   if(serrCount) parti.push(`${serrCount} serrament${serrCount===1?'o':'i'}`);
   if(lavCount) parti.push(lavTxt);
@@ -991,23 +1035,29 @@ function toggleLocBodyGeneric(prefix,id){
 
 function locBodyHTML(prefix, loc){
   const arr = prefix==='s' ? sLocali : locali;
-  const condPerLocale = optCondPerLocale;
+  const condPerLocale = prefix==='s' ? sOptCondPerLocale : optCondPerLocale;
   const cfg = cfgMestiere(mestiere);
-  // Sezione misure + badge superficie: solo per i mestieri con superficie.
-  const sezioneMisure = mestiereHaSuperficie(mestiere) ? `
-    <div class="section-lbl" style="margin-top:0">Misure</div>
-    <div class="row3">
+  // Campi misure condivisi. L'Altezza serve solo quando la superficie è
+  // pareti+soffitto (imbianchino): per il pavimento (L×W) è rumore in meno.
+  const conH = cfg.superficie==='pareti_soffitto';
+  const misureInputs = `
+    <div class="${conH?'row3':'row2'}">
       <div class="field"><label class="label">Lunghezza (m)</label>
         <input class="input" type="number" inputmode="decimal" min="0" step="0.1" value="${loc.lung}" oninput="${prefix}SetMisura(${loc.id},'lung',this.value)"></div>
       <div class="field"><label class="label">Larghezza (m)</label>
         <input class="input" type="number" inputmode="decimal" min="0" step="0.1" value="${loc.larg}" oninput="${prefix}SetMisura(${loc.id},'larg',this.value)"></div>
-      <div class="field"><label class="label">Altezza (m)</label>
-        <input class="input" type="number" inputmode="decimal" min="0" step="0.1" value="${loc.h}" oninput="${prefix}SetMisura(${loc.id},'h',this.value)"></div>
+      ${conH?`<div class="field"><label class="label">Altezza (m)</label>
+        <input class="input" type="number" inputmode="decimal" min="0" step="0.1" value="${loc.h}" oninput="${prefix}SetMisura(${loc.id},'h',this.value)"></div>`:''}
     </div>
     <div class="sup-badge">
       <span>📐 ${mestiere==='imbianchino'?'Sup. da imbiancare':'Superficie (L×W)'}</span>
       <span id="${prefix}mq-${loc.id}">${supLoc(loc).toFixed(1)} m²</span>
-    </div>
+    </div>`;
+  // Sezione misure: sempre per i mestieri con superficie; per il mestiere
+  // libero (superficie 'opzionale') è attivabile locale per locale.
+  const sezioneMisure = mestiereHaSuperficie(mestiere) ? `
+    <div class="section-lbl" style="margin-top:0">Misure</div>
+    ${misureInputs}
     ${mestiere==='imbianchino'?`
     <div style="background:var(--white);border:1.5px solid var(--border);border-radius:8px;padding:2px 12px;margin-bottom:10px">
       <div class="toggle-row">
@@ -1019,8 +1069,29 @@ function locBodyHTML(prefix, loc){
         <span class="label">⬜ Soffitto</span>
         <label class="switch"><input type="checkbox" ${loc.incSoffitto!==false?'checked':''} onchange="${prefix}SetInc(${loc.id},'incSoffitto',this.checked)"><span class="slider"></span></label>
       </div>
-    </div>`:''}` : '';
+    </div>`:''}`
+  : cfg.superficie==='opzionale' ? `
+    <div style="background:var(--white);border:1.5px solid var(--border);border-radius:8px;padding:2px 12px;margin-bottom:10px">
+      <div class="toggle-row">
+        <span class="label">📐 Misure locale</span>
+        <label class="switch"><input type="checkbox" ${loc.conMisure?'checked':''} onchange="${prefix}SetConMisure(${loc.id},this.checked)"><span class="slider"></span></label>
+      </div>
+    </div>
+    ${loc.conMisure?misureInputs:''}`
+  : '';
   // Sezione scelta lavori: freetext (riga libera + chip) oppure checklist (elenco).
+  // Anche i mestieri freetext con un elenco base (muratore) hanno la tendina
+  // "Scegli dall'elenco": prima quelle voci curate non erano raggiungibili.
+  const elencoFreetext = (cfg.lavoriMode==='freetext' && (cfg.lavori||[]).length) ? `
+    <div class="collapse" id="${prefix}lavcol-${loc.id}" style="margin-top:8px">
+      <div class="collapse-hdr" onclick="toggleCollapse('${prefix}lavcol-${loc.id}')">
+        <span>Scegli dall'elenco</span>
+        <span class="locale-arrow">▾</span>
+      </div>
+      <div class="collapse-bdy">
+        <div class="check-list" id="${prefix}lavchecks-${loc.id}"></div>
+      </div>
+    </div>` : '';
   const sezioneSceltaLavori = cfg.lavoriMode==='freetext' ? `
     <div class="add-custom-row" style="margin-top:0">
       <input class="input" id="${prefix}lavnew-${loc.id}" placeholder="${mestiere==='libero'?'Descrivi la voce…':'Scrivi una lavorazione…'}"
@@ -1028,6 +1099,7 @@ function locBodyHTML(prefix, loc){
       <button class="btn btn-primary btn-sm" onclick="${prefix}AddLavoroCustom(${loc.id})">+ Aggiungi</button>
     </div>
     <div id="${prefix}lavquick-${loc.id}" class="chip-row" style="margin-top:8px"></div>
+    ${elencoFreetext}
     ` : `
     <div class="collapse" id="${prefix}lavcol-${loc.id}">
       <div class="collapse-hdr" onclick="toggleCollapse('${prefix}lavcol-${loc.id}')">
@@ -1046,14 +1118,14 @@ function locBodyHTML(prefix, loc){
   // Sezione serramenti (serramentista o modulo attivo): elenco con disegno tecnico.
   const conSerr = serramentiAttivi(prefix);
   const sezioneSerramenti = conSerr ? `
-    <div class="section-lbl"${mestiereHaSuperficie(mestiere)?'':' style="margin-top:0"'}>Serramenti</div>
+    <div class="section-lbl"${sezioneMisure?'':' style="margin-top:0"'}>Serramenti</div>
     <div id="${prefix}serrlist-${loc.id}"></div>
     <button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:4px" onclick="serrAdd('${prefix}',${loc.id})">+ Aggiungi serramento</button>
   ` : '';
   return `
     ${sezioneMisure}
     ${sezioneSerramenti}
-    <div class="section-lbl"${(mestiereHaSuperficie(mestiere)||conSerr)?'':' style="margin-top:0"'}>${cfg.serramenti?'Voci di posa / extra':'Lavori da effettuare'}</div>
+    <div class="section-lbl"${(sezioneMisure||conSerr)?'':' style="margin-top:0"'}>${cfg.serramenti?'Voci di posa / extra':'Lavori da effettuare'}</div>
     ${sezioneSceltaLavori}
     <div id="${prefix}lavlist-${loc.id}"></div>
 
@@ -1102,6 +1174,16 @@ function setMisuraGeneric(prefix,arr,id,field,val){
   if(prefix==='p') ricalcola();
 }
 
+// ── MISURE OPZIONALI (mestiere libero) ──
+function sSetConMisure(id,val){ setConMisureGeneric('s',sLocali,id,val); }
+function pSetConMisure(id,val){ setConMisureGeneric('p',locali,id,val); }
+function setConMisureGeneric(prefix,arr,id,val){
+  const loc=arr.find(l=>l.id===id); if(!loc) return;
+  loc.conMisure=!!val;
+  // La sezione misure appare/scompare: serve rifare la card del locale.
+  if(prefix==='s') sRenderLocali(); else pRenderLocali();
+}
+
 // ── INCLUDI PARETI / SOFFITTO (imbianchino) ──
 function sSetInc(id,field,val){ setIncGeneric('s',sLocali,id,field,val); }
 function pSetInc(id,field,val){ setIncGeneric('p',locali,id,field,val); }
@@ -1145,13 +1227,23 @@ function renderLavoriList(prefix,id){
     const base=[...(cfgMestiere(mestiere).suggeriti||[]), ...(lavoriCustom[mestiere]||[])];
     const usati=[...new Set(base)].filter(n=>!loc.lavori.includes(n));
     let qhtml=usati.map(n=>`<button class="chip-add" onclick="${prefix}ToggleLavoro(${id},'${escJs(n)}')">+ ${esc(n)}</button>`).join('');
-    // Moduli attivi: voci degli altri mestieri, raggruppate per categoria.
+    // Moduli attivi: voci degli altri mestieri in gruppi RICHIUDIBILI (con 4
+    // moduli sarebbero ~30 chip sempre aperte). Lo stato aperto/chiuso vive
+    // in loc._modOpen così sopravvive ai re-render dopo ogni aggiunta.
     // (I serramenti hanno la loro sezione dedicata, non passano da qui.)
     (cfgMestiere(mestiere).importa||[]).filter(k=>k!=='serramentista' && moduliOf(prefix).includes(k)).forEach(k=>{
       const voci=lavoriList(k).filter(n=>!loc.lavori.includes(n));
       if(!voci.length) return;
-      qhtml+=`<div class="chip-group-lbl">${mestiereIcona(k)} ${cfgMestiere(k).catLbl||cfgMestiere(k).nome}</div>`;
-      qhtml+=voci.map(n=>`<button class="chip-add" onclick="${prefix}AddLavoroMod(${id},'${escJs(n)}','${k}')">+ ${esc(n)}</button>`).join('');
+      const open=!!(loc._modOpen&&loc._modOpen[k]);
+      qhtml+=`<div class="collapse" style="width:100%;margin-top:8px">
+        <div class="collapse-hdr" onclick="toggleModGroup('${prefix}',${id},'${k}')">
+          <span>${mestiereIcona(k)} ${cfgMestiere(k).catLbl||cfgMestiere(k).nome} <span style="color:var(--sub);font-weight:400">(${voci.length})</span></span>
+          <span class="locale-arrow${open?' open':''}">▾</span>
+        </div>
+        <div class="collapse-bdy${open?' open':''}">
+          <div class="chip-row" style="padding:6px 0 2px">${voci.map(n=>`<button class="chip-add" onclick="${prefix}AddLavoroMod(${id},'${escJs(n)}','${k}')">+ ${esc(n)}</button>`).join('')}</div>
+        </div>
+      </div>`;
     });
     quick.innerHTML=qhtml;
   }
@@ -1520,6 +1612,10 @@ function onOptCondChange(){
   optCondPerLocale=document.getElementById('optCondPerLocale').checked;
   aggiornaVisibilitaStato();
   pRenderLocali();
+}
+function onSOptCondChange(){
+  sOptCondPerLocale=document.getElementById('sOptCondPerLocale').checked;
+  aggiornaVisibilitaStato();
   sRenderLocali();
 }
 
@@ -1556,6 +1652,8 @@ function sResetForm(skipConfirm){
   if(!skipConfirm && !confirm('Azzerare tutti i dati del sopralluogo?')) return;
   sEditId=null; sLocali=[]; sLocCnt=0; sCondizioni=[]; sTipoStruttura='Appartamento';
   sModuli=[]; renderModuli('s');
+  sOptCondPerLocale=false;
+  const _so=document.getElementById('sOptCondPerLocale'); if(_so) _so.checked=false;
   ['sNome','sCognome','sTel','sEmail','sIndirizzo','sNote','sCondNote'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';});
   document.getElementById('sopNum').textContent=sNextNum();
   renderTipoStruttura('s', sTipoStruttura, 'sSetTipo');
@@ -1607,7 +1705,7 @@ function sSalva(ev){
     supTot: sLocali.reduce((s,l)=>s+supLoc(l),0),
     condizioniGen: sCondizioni.slice(),
     condNoteGen: document.getElementById('sCondNote').value,
-    condPerLocale: optCondPerLocale,
+    condPerLocale: sOptCondPerLocale,
     moduli: sModuli.slice(),
     note: document.getElementById('sNote').value,
     convertito: existing ? !!existing.convertito : false
@@ -1648,10 +1746,9 @@ function apriSopralluogo(id){
   sLocCnt=sLocali.length?Math.max(...sLocali.map(l=>l.id))+1:0;
   sCondizioni=(s.condizioniGen||[]).slice();
   document.getElementById('sCondNote').value=s.condNoteGen||'';
-  // Ripristina l'opzione "condizioni per locale" (prima dimenticata: la card
-  // generale restava visibile anche se il sopralluogo era salvato per-locale).
-  optCondPerLocale=!!s.condPerLocale;
-  const occ=document.getElementById('optCondPerLocale'); if(occ) occ.checked=optCondPerLocale;
+  // Ripristina l'opzione "condizioni per locale" del sopralluogo.
+  sOptCondPerLocale=!!s.condPerLocale;
+  const occ=document.getElementById('sOptCondPerLocale'); if(occ) occ.checked=sOptCondPerLocale;
   aggiornaVisibilitaStato();
   renderCondGenerali('s');
   sRenderLocali();
@@ -1688,7 +1785,7 @@ function sConvertiInPreventivo(){
     supTot: sLocali.reduce((s,l)=>s+supLoc(l),0),
     condizioniGen: sCondizioni.slice(),
     condNoteGen: document.getElementById('sCondNote').value,
-    condPerLocale: optCondPerLocale,
+    condPerLocale: sOptCondPerLocale,
     moduli: sModuli.slice(),
     note: document.getElementById('sNote').value,
     convertito:true
@@ -2224,7 +2321,7 @@ function sEsportaPDF(){
     supTot: sLocali.reduce((s,l)=>s+supLoc(l),0),
     condizioniGen: sCondizioni.slice(),
     condNoteGen: document.getElementById('sCondNote').value,
-    condPerLocale: optCondPerLocale,
+    condPerLocale: sOptCondPerLocale,
     moduli: sModuli.slice(),
     note: document.getElementById('sNote').value,
     convertito: existing ? !!existing.convertito : false
@@ -2280,6 +2377,7 @@ function prevItemHTML(p,compact){
   const azioni=compact?'':`<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();apriPrev('${p.id}')">✏️ Modifica</button>
     <button class="btn btn-success btn-sm" onclick="event.stopPropagation();pdfById('${p.id}')">⬇ PDF</button>
+    <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();duplicaPrev('${p.id}')">⧉ Duplica</button>
     <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--sub);font-weight:600">Stato:
       <select class="status-select" style="${statoStyle[p.stato||'bozza']}" onclick="event.stopPropagation()" onchange="cambiaStato('${p.id}',this.value)">
         <option value="bozza" ${p.stato==='bozza'?'selected':''}>📝 Bozza</option>
@@ -2311,6 +2409,22 @@ function cambiaStato(id,stato){
   if(p){p.stato=stato; if(String(p.id)===String(editId)) currentStato=stato; Store.savePreventivi(preventivi);aggStats();}
 }
 
+// Duplica un preventivo: nuova numerazione, data di oggi, stato bozza.
+// Utile per lavori simili (stesso condominio, stessi prezzi): si apre
+// subito in modifica.
+function duplicaPrev(id){
+  const p=preventivi.find(x=>String(x.id)===String(id)); if(!p) return;
+  const copia=JSON.parse(JSON.stringify(p));
+  copia.id=Date.now();
+  copia.numero=nextNum();
+  copia.data=new Date().toLocaleDateString('it-IT');
+  copia.dataISO=new Date().toISOString();
+  copia.stato='bozza';
+  preventivi.push(copia);
+  Store.savePreventivi(preventivi);
+  apriPrev(copia.id);
+}
+
 function elimina(id){
   if(!confirm('Eliminare questo preventivo?'))return;
   preventivi=preventivi.filter(p=>String(p.id)!==String(id));
@@ -2326,7 +2440,7 @@ function elimina(id){
 // ══════════════════════════════════════════════════════════
 function esportaBackup(){
   const backup={
-    versione: 1,
+    versione: 2, // v2: documenti con moduli, lavoriCat, serramenti, conMisure
     esportato: new Date().toISOString(),
     impresa: impresa,
     mestiere: mestiere,
