@@ -311,13 +311,16 @@ function copiaSerramenti(l){
 //  - lavoriMode: 'checklist' (elenco con caselle) | 'freetext' (riga libera + chip)
 //  - suggeriti:  scorciatoie a chip per la modalità freetext
 // ══════════════════════════════════════════════════════════
+// - catLbl:  nome della categoria nel PDF (riepilogo per categoria)
+// - importa: mestieri le cui voci si possono attivare come "moduli" in un
+//            documento di questo mestiere (es. muratore = impresa generale)
 const MESTIERI = {
-  imbianchino:  { nome:'Imbianchino',     short:'Imbianchino',  icona:'🎨', superficie:'pareti_soffitto', quantita:false, lavoriMode:'checklist', suggeriti:[],                lavori:LAVORI_IMBIANCHINO },
-  muratore:     { nome:'Muratore',        short:'Muratore',     icona:'🧱', superficie:'pavimento',        quantita:false, lavoriMode:'freetext',  suggeriti:MURATORE_SUGGERITI, lavori:LAVORI_MURATORE },
-  elettricista: { nome:'Elettricista',    short:'Elettricista', icona:'⚡', superficie:'nessuna',          quantita:true,  lavoriMode:'checklist', suggeriti:[],                lavori:LAVORI_ELETTRICISTA },
-  idraulico:    { nome:'Idraulico',       short:'Idraulico',    icona:'🔧', superficie:'nessuna',          quantita:true,  lavoriMode:'checklist', suggeriti:[],                lavori:LAVORI_IDRAULICO },
-  serramentista:{ nome:'Serramentista',   short:'Serramenti',   icona:'🪟', superficie:'nessuna',          quantita:true,  lavoriMode:'freetext',  suggeriti:SERRAMENTISTA_SUGGERITI, lavori:[], serramenti:true },
-  libero:       { nome:'Mestiere libero', short:'Libero',       icona:'🛠', superficie:'opzionale',        quantita:true,  lavoriMode:'freetext',  suggeriti:[],                lavori:[] }
+  imbianchino:  { nome:'Imbianchino',     short:'Imbianchino',  icona:'🎨', superficie:'pareti_soffitto', quantita:false, lavoriMode:'checklist', suggeriti:[],                lavori:LAVORI_IMBIANCHINO, catLbl:'Imbiancatura' },
+  muratore:     { nome:'Muratore',        short:'Muratore',     icona:'🧱', superficie:'pavimento',        quantita:false, lavoriMode:'freetext',  suggeriti:MURATORE_SUGGERITI, lavori:LAVORI_MURATORE, catLbl:'Opere murarie', importa:['imbianchino','elettricista','idraulico','serramentista'] },
+  elettricista: { nome:'Elettricista',    short:'Elettricista', icona:'⚡', superficie:'nessuna',          quantita:true,  lavoriMode:'checklist', suggeriti:[],                lavori:LAVORI_ELETTRICISTA, catLbl:'Impianto elettrico' },
+  idraulico:    { nome:'Idraulico',       short:'Idraulico',    icona:'🔧', superficie:'nessuna',          quantita:true,  lavoriMode:'checklist', suggeriti:[],                lavori:LAVORI_IDRAULICO, catLbl:'Impianto idraulico' },
+  serramentista:{ nome:'Serramentista',   short:'Serramenti',   icona:'🪟', superficie:'nessuna',          quantita:true,  lavoriMode:'freetext',  suggeriti:SERRAMENTISTA_SUGGERITI, lavori:[], serramenti:true, catLbl:'Serramenti' },
+  libero:       { nome:'Mestiere libero', short:'Libero',       icona:'🛠', superficie:'opzionale',        quantita:true,  lavoriMode:'freetext',  suggeriti:[],                lavori:[], catLbl:'Varie' }
 };
 function cfgMestiere(m){ return MESTIERI[m] || MESTIERI.imbianchino; }
 // Solo pareti_soffitto e pavimento mostrano misure/superficie.
@@ -419,14 +422,21 @@ function qtaOf(loc, nome){
 function sommaLavoriLoc(loc, mest){
   const cfg=cfgMestiere(mest||mestiere);
   const prezzi=loc.lavoriPrezzi||{};
+  const cats=loc.lavoriCat||{};
   let tot;
   if(cfg.quantita){
     tot=(loc.lavori||[]).reduce((s,n)=>s + qtaOf(loc,n)*((prezzi[n])||0), 0);
   } else {
+    // Formula storica (somma dei prezzi salvati): resta INVARIATA per i
+    // documenti esistenti. Le voci importate dai moduli con quantità
+    // aggiungono i multipli oltre il primo: prezzo già contato + (qta-1)×prezzo.
     tot=Object.values(prezzi).reduce((s,p)=>s+(p||0),0);
+    (loc.lavori||[]).forEach(n=>{
+      if(cats[n] && cfgMestiere(cats[n]).quantita) tot+=(qtaOf(loc,n)-1)*((prezzi[n])||0);
+    });
   }
-  // Serramentista: i serramenti (qta × prezzo) si sommano alle voci di posa.
-  if(cfg.serramenti) tot+=sommaSerramenti(loc);
+  // Serramenti (qta × prezzo): presenti solo per serramentista o col modulo attivo.
+  tot+=sommaSerramenti(loc);
   return tot;
 }
 
@@ -441,12 +451,14 @@ let mestiere = Store.getMestiere();
 let sLocali=[]; let sLocCnt=0;
 let sTipoStruttura='Appartamento';
 let sCondizioni=[]; // condizioni generali sopralluogo
+let sModuli=[];     // moduli di altri mestieri attivi (es. muratore + elettrico)
 let sEditId=null;
 
 // Preventivo
 let locali=[]; let locCnt=0;
 let pTipoStruttura='Appartamento';
 let condizioni=[]; // condizioni generali preventivo
+let pModuli=[];    // moduli di altri mestieri attivi
 let optMdoPerLocale=false;
 let optCondPerLocale=false;
 let editId=null;
@@ -583,6 +595,7 @@ function setMestiere(m, force){
         loc.lavori = (loc.lavori||[]).filter(n => newList.includes(n));
         if(loc.lavoriPrezzi) rimossi.forEach(n => delete loc.lavoriPrezzi[n]);
         if(loc.lavoriQta)    rimossi.forEach(n => delete loc.lavoriQta[n]);
+        if(loc.lavoriCat)    rimossi.forEach(n => delete loc.lavoriCat[n]);
         if(!cfgMestiere(m).serramenti) loc.serramenti=[];
       };
       sLocali.forEach(clean);
@@ -627,9 +640,97 @@ function applyMestiereUI(){
     }
   }
   aggiornaVisibilitaStato();
+  // Moduli: hanno senso solo per i mestieri che possono importarne.
+  if(!(cfgMestiere(mestiere).importa||[]).length){ sModuli=[]; pModuli=[]; }
+  renderModuli('s'); renderModuli('p');
   sRenderLocali();
   pRenderLocali();
 }
+// ══════════════════════════════════════════════════════════
+//  MODULI — voci di altri mestieri dentro un documento
+//  (es. muratore "impresa generale" che fa anche elettrico, idraulico,
+//  imbiancatura e serramenti). Attivabili per singolo documento; ogni voce
+//  importata ricorda il mestiere d'origine in loc.lavoriCat e ne usa le
+//  regole (quantità × prezzo, icona, categoria nel PDF).
+// ══════════════════════════════════════════════════════════
+function moduliOf(prefix){ return prefix==='s' ? sModuli : pModuli; }
+function moduloAttivo(prefix,k){
+  return (cfgMestiere(mestiere).importa||[]).includes(k) && moduliOf(prefix).includes(k);
+}
+// La sezione serramenti è attiva se il mestiere la prevede nativamente
+// (serramentista) oppure se il modulo serramenti è acceso nel documento.
+function serramentiAttivi(prefix){
+  return !!cfgMestiere(mestiere).serramenti || moduloAttivo(prefix,'serramentista');
+}
+function renderModuli(prefix){
+  const card=document.getElementById(prefix+'ModuliCard');
+  const list=document.getElementById(prefix+'ModuliList');
+  if(!card||!list) return;
+  const imp=cfgMestiere(mestiere).importa||[];
+  card.style.display = imp.length ? '' : 'none';
+  if(!imp.length){ list.innerHTML=''; return; }
+  const act=moduliOf(prefix);
+  list.innerHTML=imp.map((k,i)=>{
+    const m=cfgMestiere(k);
+    return `${i?'<div class="divider"></div>':''}<div class="toggle-row">
+      <span class="label">${m.icona} ${m.catLbl||m.nome}</span>
+      <label class="switch"><input type="checkbox" ${act.includes(k)?'checked':''} onchange="toggleModulo('${prefix}','${k}',this.checked)"><span class="slider"></span></label>
+    </div>`;
+  }).join('');
+}
+function toggleModulo(prefix,k,on){
+  const act=moduliOf(prefix);
+  const i=act.indexOf(k);
+  if(on && i<0) act.push(k);
+  if(!on && i>=0){
+    // Se nel documento ci sono già voci/serramenti di questo modulo,
+    // disattivarlo li rimuove: meglio chiedere prima.
+    const arr=prefix==='s'?sLocali:locali;
+    const haVoci=arr.some(l=>
+      (l.lavori||[]).some(n=>(l.lavoriCat||{})[n]===k) ||
+      (k==='serramentista' && (l.serramenti||[]).length)
+    );
+    if(haVoci && !confirm('Disattivando questo mestiere le sue voci saranno rimosse dal documento. Continuare?')){
+      renderModuli(prefix);
+      return;
+    }
+    act.splice(i,1);
+    if(haVoci){
+      arr.forEach(l=>{
+        const rim=(l.lavori||[]).filter(n=>(l.lavoriCat||{})[n]===k);
+        l.lavori=(l.lavori||[]).filter(n=>(l.lavoriCat||{})[n]!==k);
+        rim.forEach(n=>{
+          if(l.lavoriPrezzi) delete l.lavoriPrezzi[n];
+          if(l.lavoriQta)    delete l.lavoriQta[n];
+          if(l.lavoriCat)    delete l.lavoriCat[n];
+        });
+        if(k==='serramentista') l.serramenti=[];
+      });
+    }
+  }
+  if(prefix==='s'){ sRenderLocali(); }
+  else { pRenderLocali(); ricalcola(); }
+}
+// Aggiunge a un locale una voce importata da un modulo (con categoria).
+function sAddLavoroMod(id,n,cat){ addLavoroModGeneric('s',sLocali,id,n,cat); }
+function pAddLavoroMod(id,n,cat){ addLavoroModGeneric('p',locali,id,n,cat); }
+function addLavoroModGeneric(prefix,arr,id,n,cat){
+  const loc=arr.find(l=>l.id===id); if(!loc) return;
+  if(!loc.lavori.includes(n)){
+    loc.lavori.push(n);
+    if(!loc.lavoriCat) loc.lavoriCat={};
+    loc.lavoriCat[n]=cat;
+  }
+  renderLavoriList(prefix,id);
+  const sub=document.getElementById(prefix+'hdr-sub-'+id);
+  if(sub) sub.textContent=subLocale(loc,true);
+  if(prefix==='p'){
+    const th=document.getElementById('phdr-tot-'+id);
+    if(th) th.textContent='€'+pCalcoloTotLoc(loc).toFixed(2);
+    ricalcola();
+  }
+}
+
 // Visibilità sezione stato/condizioni: dipende dal mestiere (alcuni non la prevedono)
 // e dalla modalità per-locale (la card generale sparisce se le condizioni sono per locale).
 function aggiornaVisibilitaStato(){
@@ -799,7 +900,7 @@ function renderLocaliGeneric(prefix, arr, listId, boxId, valId){
   // init sub-renders
   arr.forEach(loc=>{
     renderLavoriList(prefix,loc.id);
-    if(cfgMestiere(mestiere).serramenti) renderSerramenti(prefix,loc.id);
+    if(serramentiAttivi(prefix)) renderSerramenti(prefix,loc.id);
     if((prefix==='s'?optCondLocaleS():optCondPerLocale)) renderCondLocale(prefix,loc.id);
   });
 }
@@ -823,8 +924,8 @@ function subLocale(loc, aperto){
       ? (lavCount ? `${mqTxt} · ${lavTxt}` : mqTxt)
       : (lavCount ? `${mqTxt} · ${lavTxt} · tocca per modificare` : `${mqTxt} · tocca per misure e lavori`);
   }
-  // Serramentista: nel sottotitolo contano anche i serramenti.
-  const serrCount = cfgMestiere(mestiere).serramenti ? (loc.serramenti||[]).length : 0;
+  // Serramentista (o modulo serramenti): nel sottotitolo contano anche i serramenti.
+  const serrCount = (loc.serramenti||[]).length;
   const parti=[];
   if(serrCount) parti.push(`${serrCount} serrament${serrCount===1?'o':'i'}`);
   if(lavCount) parti.push(lavTxt);
@@ -942,16 +1043,17 @@ function locBodyHTML(prefix, loc){
       </div>
     </div>
     `;
-  // Sezione serramenti (solo serramentista): elenco con disegno tecnico.
-  const sezioneSerramenti = cfg.serramenti ? `
-    <div class="section-lbl" style="margin-top:0">Serramenti</div>
+  // Sezione serramenti (serramentista o modulo attivo): elenco con disegno tecnico.
+  const conSerr = serramentiAttivi(prefix);
+  const sezioneSerramenti = conSerr ? `
+    <div class="section-lbl"${mestiereHaSuperficie(mestiere)?'':' style="margin-top:0"'}>Serramenti</div>
     <div id="${prefix}serrlist-${loc.id}"></div>
     <button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:4px" onclick="serrAdd('${prefix}',${loc.id})">+ Aggiungi serramento</button>
   ` : '';
   return `
     ${sezioneMisure}
     ${sezioneSerramenti}
-    <div class="section-lbl"${(mestiereHaSuperficie(mestiere)||cfg.serramenti)?'':' style="margin-top:0"'}>${cfg.serramenti?'Voci di posa / extra':'Lavori da effettuare'}</div>
+    <div class="section-lbl"${(mestiereHaSuperficie(mestiere)||conSerr)?'':' style="margin-top:0"'}>${cfg.serramenti?'Voci di posa / extra':'Lavori da effettuare'}</div>
     ${sezioneSceltaLavori}
     <div id="${prefix}lavlist-${loc.id}"></div>
 
@@ -1042,18 +1144,30 @@ function renderLavoriList(prefix,id){
   if(quick){
     const base=[...(cfgMestiere(mestiere).suggeriti||[]), ...(lavoriCustom[mestiere]||[])];
     const usati=[...new Set(base)].filter(n=>!loc.lavori.includes(n));
-    quick.innerHTML=usati.map(n=>`<button class="chip-add" onclick="${prefix}ToggleLavoro(${id},'${escJs(n)}')">+ ${esc(n)}</button>`).join('');
+    let qhtml=usati.map(n=>`<button class="chip-add" onclick="${prefix}ToggleLavoro(${id},'${escJs(n)}')">+ ${esc(n)}</button>`).join('');
+    // Moduli attivi: voci degli altri mestieri, raggruppate per categoria.
+    // (I serramenti hanno la loro sezione dedicata, non passano da qui.)
+    (cfgMestiere(mestiere).importa||[]).filter(k=>k!=='serramentista' && moduliOf(prefix).includes(k)).forEach(k=>{
+      const voci=lavoriList(k).filter(n=>!loc.lavori.includes(n));
+      if(!voci.length) return;
+      qhtml+=`<div class="chip-group-lbl">${mestiereIcona(k)} ${cfgMestiere(k).catLbl||cfgMestiere(k).nome}</div>`;
+      qhtml+=voci.map(n=>`<button class="chip-add" onclick="${prefix}AddLavoroMod(${id},'${escJs(n)}','${k}')">+ ${esc(n)}</button>`).join('');
+    });
+    quick.innerHTML=qhtml;
   }
   const list=document.getElementById(prefix+'lavlist-'+id);
   if(list){
-    if(!loc.lavori.length){
-      list.innerHTML='';
-    } else if(prefix==='s' && cfgMestiere(mestiere).quantita){
-      // sopralluogo CON quantità (elettricista/idraulico/libero): conta i pezzi sul posto
-      list.innerHTML=`<div style="margin-top:8px">${loc.lavori.map(n=>`
+    // La modalità di ogni voce (quantità sì/no, icona) segue la SUA categoria:
+    // le voci importate dai moduli usano le regole del mestiere d'origine,
+    // le altre quelle del mestiere del documento.
+    const cats=loc.lavoriCat||{};
+    const vQta=n=>!!cfgMestiere(cats[n]||mestiere).quantita;
+    const vIco=n=>cats[n]?mestiereIcona(cats[n])+' ':'';
+    // riga conta-pezzi (sopralluogo)
+    const sRowQ=n=>`
         <div class="lavoro-rowq">
           <div class="lavoro-rowq-top">
-            <span class="lavoro-nome">${esc(n)}</span>
+            <span class="lavoro-nome">${vIco(n)}${esc(n)}</span>
             <button class="btn-danger" onclick="sToggleLavoro(${id},'${escJs(n)}')">✕</button>
           </div>
           <div class="lavoro-rowq-bot">
@@ -1065,16 +1179,12 @@ function renderLavoriList(prefix,id){
               <button type="button" class="qstep-btn" onclick="sStepQta(${id},'${escJs(n)}',1)">+</button>
             </div>
           </div>
-        </div>`).join('')}</div>`;
-    } else if(prefix==='s'){
-      list.innerHTML=`<div class="chip-row">${loc.lavori.map(n=>`
-        <span class="chip">${esc(n)}<button onclick="sToggleLavoro(${id},'${escJs(n)}')">✕</button></span>`).join('')}</div>`;
-    } else if(cfgMestiere(mestiere).quantita){
-      // preventivo CON quantità: Q.tà (con −/+) × Prezzo = Totale
-      list.innerHTML=`<div style="margin-top:8px">${loc.lavori.map((n,idx)=>`
+        </div>`;
+    // riga Q.tà × Prezzo = Totale (preventivo)
+    const pRowQ=(n,idx)=>`
         <div class="lavoro-rowq">
           <div class="lavoro-rowq-top">
-            <span class="lavoro-nome">${esc(n)}</span>
+            <span class="lavoro-nome">${vIco(n)}${esc(n)}</span>
             <button class="btn-danger" onclick="pToggleLavoro(${id},'${escJs(n)}')">✕</button>
           </div>
           <div class="lavoro-rowq-bot">
@@ -1091,17 +1201,30 @@ function renderLavoriList(prefix,id){
             <span class="qeq">=</span>
             <span class="qtot" id="prigatot-${id}-${idx}">€${(qtaOf(loc,n)*((loc.lavoriPrezzi?.[n])||0)).toFixed(2)}</span>
           </div>
-        </div>`).join('')}</div>`;
-    } else {
-      // preventivo: ogni lavoro con prezzo
-      list.innerHTML=`<div style="margin-top:8px">${loc.lavori.map(n=>`
+        </div>`;
+    // riga a solo prezzo (preventivo)
+    const pRow=n=>`
         <div class="lavoro-row">
-          <span class="lavoro-nome">${esc(n)}</span>
+          <span class="lavoro-nome">${vIco(n)}${esc(n)}</span>
           <input class="input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="€"
             value="${loc.lavoriPrezzi?.[n]||''}"
             oninput="pSetLavoroPrezzo(${id},'${escJs(n)}',this.value)">
           <button class="btn-danger" onclick="pToggleLavoro(${id},'${escJs(n)}')">✕</button>
-        </div>`).join('')}</div>`;
+        </div>`;
+    if(!loc.lavori.length){
+      list.innerHTML='';
+    } else if(prefix==='s'){
+      // sopralluogo: voci senza quantità → chip; voci con quantità → conta-pezzi
+      const semplici=loc.lavori.filter(n=>!vQta(n));
+      const conQ=loc.lavori.filter(vQta);
+      let html='';
+      if(semplici.length) html+=`<div class="chip-row">${semplici.map(n=>`
+        <span class="chip">${vIco(n)}${esc(n)}<button onclick="sToggleLavoro(${id},'${escJs(n)}')">✕</button></span>`).join('')}</div>`;
+      if(conQ.length) html+=`<div style="margin-top:8px">${conQ.map(sRowQ).join('')}</div>`;
+      list.innerHTML=html;
+    } else {
+      // preventivo: ogni voce con la sua modalità
+      list.innerHTML=`<div style="margin-top:8px">${loc.lavori.map((n,idx)=>vQta(n)?pRowQ(n,idx):pRow(n)).join('')}</div>`;
     }
   }
 }
@@ -1115,6 +1238,7 @@ function toggleLavoroGeneric(prefix,arr,id,nome){
     loc.lavori.splice(i,1);
     if(loc.lavoriPrezzi) delete loc.lavoriPrezzi[nome];
     if(loc.lavoriQta) delete loc.lavoriQta[nome];
+    if(loc.lavoriCat) delete loc.lavoriCat[nome];
   } else {
     loc.lavori.push(nome);
   }
@@ -1431,6 +1555,7 @@ function ricalcola(){
 function sResetForm(skipConfirm){
   if(!skipConfirm && !confirm('Azzerare tutti i dati del sopralluogo?')) return;
   sEditId=null; sLocali=[]; sLocCnt=0; sCondizioni=[]; sTipoStruttura='Appartamento';
+  sModuli=[]; renderModuli('s');
   ['sNome','sCognome','sTel','sEmail','sIndirizzo','sNote','sCondNote'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';});
   document.getElementById('sopNum').textContent=sNextNum();
   renderTipoStruttura('s', sTipoStruttura, 'sSetTipo');
@@ -1443,6 +1568,7 @@ function resetForm(skipConfirm){
   if(!skipConfirm && !confirm('Azzerare tutti i dati del preventivo?')) return;
   clearTimeout(_autoSalvaTimer); // annulla un eventuale auto-salvataggio in coda
   editId=null; locali=[]; locCnt=0; condizioni=[]; pTipoStruttura='Appartamento';
+  pModuli=[]; renderModuli('p');
   currentStato='bozza';
   optMdoPerLocale=false; optCondPerLocale=false;
   ['clNome','clCognome','clTel','clEmail','clIndirizzo','mdoGenerale','sconto','nNote','pCondNote'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';});
@@ -1477,11 +1603,12 @@ function sSalva(ev){
     mestiere: mestiere,
     tipoStruttura: sTipoStruttura,
     cliente:{nome,cognome:document.getElementById('sCognome').value,tel:document.getElementById('sTel').value,email:document.getElementById('sEmail').value,indirizzo:document.getElementById('sIndirizzo').value},
-    locali: sLocali.map(l=>({...l,lavori:[...l.lavori],lavoriQta:{...(l.lavoriQta||{})},serramenti:copiaSerramenti(l),condizioni:[...(l.condizioni||[])]})),
+    locali: sLocali.map(l=>({...l,lavori:[...l.lavori],lavoriQta:{...(l.lavoriQta||{})},lavoriCat:{...(l.lavoriCat||{})},serramenti:copiaSerramenti(l),condizioni:[...(l.condizioni||[])]})),
     supTot: sLocali.reduce((s,l)=>s+supLoc(l),0),
     condizioniGen: sCondizioni.slice(),
     condNoteGen: document.getElementById('sCondNote').value,
     condPerLocale: optCondPerLocale,
+    moduli: sModuli.slice(),
     note: document.getElementById('sNote').value,
     convertito: existing ? !!existing.convertito : false
   };
@@ -1507,11 +1634,14 @@ function apriSopralluogo(id){
   sTipoStruttura=s.tipoStruttura||'Appartamento';
   renderTipoStruttura('s', sTipoStruttura, 'sSetTipo');
   // Copia completa: include lavoriQta e lavoriPrezzi (prima venivano persi al riaprire).
+  sModuli=(s.moduli||[]).slice();
+  renderModuli('s');
   sLocali=(s.locali||[]).map(l=>({
     ...l,
     lavori:[...(l.lavori||[])],
     lavoriPrezzi:{...(l.lavoriPrezzi||{})},
     lavoriQta:{...(l.lavoriQta||{})},
+    lavoriCat:{...(l.lavoriCat||{})},
     serramenti:copiaSerramenti(l),
     condizioni:[...(l.condizioni||[])]
   }));
@@ -1554,11 +1684,12 @@ function sConvertiInPreventivo(){
     mestiere: mestiere,
     tipoStruttura: sTipoStruttura,
     cliente:{nome,cognome:document.getElementById('sCognome').value,tel:document.getElementById('sTel').value,email:document.getElementById('sEmail').value,indirizzo:document.getElementById('sIndirizzo').value},
-    locali: sLocali.map(l=>({...l,lavori:[...l.lavori],lavoriQta:{...(l.lavoriQta||{})},serramenti:copiaSerramenti(l),condizioni:[...(l.condizioni||[])]})),
+    locali: sLocali.map(l=>({...l,lavori:[...l.lavori],lavoriQta:{...(l.lavoriQta||{})},lavoriCat:{...(l.lavoriCat||{})},serramenti:copiaSerramenti(l),condizioni:[...(l.condizioni||[])]})),
     supTot: sLocali.reduce((s,l)=>s+supLoc(l),0),
     condizioniGen: sCondizioni.slice(),
     condNoteGen: document.getElementById('sCondNote').value,
     condPerLocale: optCondPerLocale,
+    moduli: sModuli.slice(),
     note: document.getElementById('sNote').value,
     convertito:true
   };
@@ -1587,7 +1718,10 @@ function sConvertiInPreventivo(){
   renderTipoStruttura('p', pTipoStruttura, 'pSetTipo');
   // Serramenti: misure/aperture/quantita' passano al preventivo, i prezzi si
   // azzerano (come i lavoriPrezzi: al sopralluogo non si prezzano le voci).
-  locali=d.locali.map(l=>({...l, lavoriPrezzi:{}, lavoriQta:{...(l.lavoriQta||{})}, serramenti:copiaSerramenti(l).map(x=>({...x, prezzo:0})), mdoLocale:0}));
+  // I moduli attivi e le categorie delle voci passano anch'essi al preventivo.
+  pModuli=(d.moduli||[]).slice();
+  renderModuli('p');
+  locali=d.locali.map(l=>({...l, lavoriPrezzi:{}, lavoriQta:{...(l.lavoriQta||{})}, lavoriCat:{...(l.lavoriCat||{})}, serramenti:copiaSerramenti(l).map(x=>({...x, prezzo:0})), mdoLocale:0}));
   locCnt=locali.length?Math.max(...locali.map(l=>l.id))+1:0;
   condizioni=(d.condizioniGen||[]).slice();
   document.getElementById('pCondNote').value=d.condNoteGen||'';
@@ -1669,9 +1803,10 @@ function getDati(){
       email:document.getElementById('clEmail').value,
       indirizzo:document.getElementById('clIndirizzo').value,
     },
-    locali: locali.map(l=>({...l, lavori:[...l.lavori], lavoriPrezzi:{...(l.lavoriPrezzi||{})}, lavoriQta:{...(l.lavoriQta||{})}, serramenti:copiaSerramenti(l), condizioni:[...(l.condizioni||[])]})),
+    locali: locali.map(l=>({...l, lavori:[...l.lavori], lavoriPrezzi:{...(l.lavoriPrezzi||{})}, lavoriQta:{...(l.lavoriQta||{})}, lavoriCat:{...(l.lavoriCat||{})}, serramenti:copiaSerramenti(l), condizioni:[...(l.condizioni||[])]})),
     supTot: locali.reduce((s,l)=>s+supLoc(l),0),
     optMdoPerLocale, optCondPerLocale,
+    moduli: pModuli.slice(),
     mdoGenerale: parseFloat(document.getElementById('mdoGenerale').value)||0,
     sconto:parseFloat(document.getElementById('sconto').value)||0,
     iva:(()=>{const v=parseFloat(document.getElementById('iva').value);return Number.isFinite(v)?v:22;})(),
@@ -1722,7 +1857,9 @@ function apriPrev(id){
   document.getElementById('optCondPerLocale').checked=optCondPerLocale;
   document.getElementById('pMdoGenCard').style.display = optMdoPerLocale ? 'none' : '';
   aggiornaVisibilitaStato();
-  locali=(p.locali||[]).map(l=>({...l, lavori:[...(l.lavori||[])], lavoriPrezzi:{...(l.lavoriPrezzi||{})}, lavoriQta:{...(l.lavoriQta||{})}, serramenti:copiaSerramenti(l), condizioni:[...(l.condizioni||[])]}));
+  pModuli=(p.moduli||[]).slice();
+  renderModuli('p');
+  locali=(p.locali||[]).map(l=>({...l, lavori:[...(l.lavori||[])], lavoriPrezzi:{...(l.lavoriPrezzi||{})}, lavoriQta:{...(l.lavoriQta||{})}, lavoriCat:{...(l.lavoriCat||{})}, serramenti:copiaSerramenti(l), condizioni:[...(l.condizioni||[])]}));
   locCnt=locali.length?Math.max(...locali.map(l=>l.id))+1:0;
   condizioni=(p.condizioniGen||[]).slice();
   document.getElementById('pCondNote').value=p.condNoteGen||'';
@@ -1843,9 +1980,9 @@ function buildAntHTML(d){
   const scad=new Date(d.dataISO); scad.setDate(scad.getDate()+(Number.isFinite(valGiorni)?valGiorni:30));
 
   const righeLocali = locs.map(loc=>{
-    const conQta=cfgMestiere(d.mestiere).quantita;
-    // Serramenti (solo serramentista): riga con disegno tecnico + descrizione.
-    const serrRows=(cfgMestiere(d.mestiere).serramenti?(loc.serramenti||[]):[]).map(s=>{
+    const cats=loc.lavoriCat||{};
+    // Serramenti (serramentista o modulo attivo): disegno tecnico + descrizione.
+    const serrRows=(loc.serramenti||[]).map(s=>{
       const q=parseFloat(s.qta)||1;
       const tot=q*(parseFloat(s.prezzo)||0);
       const ap=[];
@@ -1864,10 +2001,13 @@ function buildAntHTML(d){
       </tr>`;
     }).join('');
     const lavRows=(loc.lavori||[]).map(n=>{
+      // modalità della voce = quella della SUA categoria (voci importate dai moduli)
+      const conQta=!!cfgMestiere(cats[n]||d.mestiere).quantita;
+      const ico=cats[n]?mestiereIcona(cats[n])+' ':'';
       const prezzo=(loc.lavoriPrezzi||{})[n]||0;
       const qta=qtaOf(loc,n);
       const rigaTot=conQta?qta*prezzo:prezzo;
-      const desc=conQta?`${esc(n)} <span style="color:#6B7280;font-size:.85em;white-space:nowrap">×${(+qta.toFixed(2))}${prezzo>0?` @ €${prezzo.toFixed(2)}`:''}</span>`:esc(n);
+      const desc=ico+(conQta?`${esc(n)} <span style="color:#6B7280;font-size:.85em;white-space:nowrap">×${(+qta.toFixed(2))}${prezzo>0?` @ €${prezzo.toFixed(2)}`:''}</span>`:esc(n));
       return `<tr>
         <td style="padding:.5em .6em;border-bottom:1px solid #E4E7EC">${desc}</td>
         <td style="padding:.5em .6em;border-bottom:1px solid #E4E7EC;text-align:right;white-space:nowrap">${rigaTot>0?'€'+rigaTot.toFixed(2):''}</td>
@@ -1906,6 +2046,26 @@ function buildAntHTML(d){
     </table>
     ${d.supTot>0?`<div style="font-size:.85em;color:#6B7280;margin-bottom:1em">Superficie ${d.mestiere==='imbianchino'?'da imbiancare':'totale'}: <strong style="color:#111827">${d.supTot.toFixed(1)} m²</strong></div>`:''}`;
 
+  // Riepilogo per categoria: compare solo se il documento ha voci di più
+  // mestieri (moduli attivi) — per i documenti "puri" non cambia nulla.
+  const catTot={};
+  locs.forEach(loc=>{
+    const cats=loc.lavoriCat||{};
+    (loc.lavori||[]).forEach(n=>{
+      const c=cats[n]||d.mestiere;
+      const p=(loc.lavoriPrezzi||{})[n]||0;
+      catTot[c]=(catTot[c]||0)+(cfgMestiere(c).quantita?qtaOf(loc,n)*p:p);
+    });
+    const st=sommaSerramenti(loc);
+    if(st) catTot.serramentista=(catTot.serramentista||0)+st;
+  });
+  const catKeys=Object.keys(catTot).filter(k=>catTot[k]>0);
+  const riepilogoCat = catKeys.length>1 ? `
+    <div style="background:#F7F8FA;border-radius:8px;padding:.8em;margin-bottom:1em" class="no-break">
+      <div style="font-size:.75em;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6B7280;margin-bottom:.4em">Riepilogo per categoria</div>
+      ${catKeys.map(k=>`<div style="display:flex;justify-content:space-between;font-size:.9em;padding:.15em 0"><span>${mestiereIcona(k)} ${cfgMestiere(k).catLbl||cfgMestiere(k).nome}</span><span style="font-weight:700">€${catTot[k].toFixed(2)}</span></div>`).join('')}
+    </div>` : '';
+
   const _condGen = (d.condizioniGen||[]).filter(c=>statoOpzioni(d.mestiere).includes(c));
   const condGenTxt = mestiereMostraStato(d.mestiere) && !d.optCondPerLocale && (_condGen.length || d.condNoteGen) ?
     `<div style="background:#F7F8FA;border-radius:8px;padding:.8em;margin-bottom:1em" class="no-break">
@@ -1930,7 +2090,7 @@ function buildAntHTML(d){
       <div style="font-size:.875em;color:#6B7280">${[d.cliente?.tel,d.cliente?.email].filter(Boolean).map(esc).join(' · ')}</div>
     </div>
 
-    ${tabellaLavori}
+    ${tabellaLavori}${riepilogoCat}
     ${condGenTxt}
 
     <div style="background:#111827;border-radius:8px;padding:1em;margin-bottom:1em" class="no-break">
@@ -1973,10 +2133,14 @@ function sBuildAntHTML(d){
   const locs=d.locali||[];
 
   const righeLocali = locs.map(loc=>{
-    const _q=cfgMestiere(d.mestiere).quantita;
-    const lavTxt=(loc.lavori||[]).map(n=>_q?`${esc(n)} ×${(+qtaOf(loc,n).toFixed(2))}`:esc(n)).join(', ')||'—';
-    // Serramenti rilevati (solo serramentista): disegno + misure, senza prezzi.
-    const serrTxt=(cfgMestiere(d.mestiere).serramenti?(loc.serramenti||[]):[]).map(s=>{
+    const _cats=loc.lavoriCat||{};
+    const lavTxt=(loc.lavori||[]).map(n=>{
+      const _q=!!cfgMestiere(_cats[n]||d.mestiere).quantita;
+      const _i=_cats[n]?mestiereIcona(_cats[n])+' ':'';
+      return _q?`${_i}${esc(n)} ×${(+qtaOf(loc,n).toFixed(2))}`:_i+esc(n);
+    }).join(', ')||'—';
+    // Serramenti rilevati (serramentista o modulo attivo): disegno + misure, senza prezzi.
+    const serrTxt=(loc.serramenti||[]).map(s=>{
       const q=parseFloat(s.qta)||1;
       const ap=[];
       for(let i=0;i<Math.min(Math.max(parseInt(s.ante)||1,1),4);i++) ap.push(aperturaLbl((s.aperture||[])[i]||'fissa'));
@@ -2056,11 +2220,12 @@ function sEsportaPDF(){
     mestiere: mestiere,
     tipoStruttura: sTipoStruttura,
     cliente:{nome,cognome:document.getElementById('sCognome').value,tel:document.getElementById('sTel').value,email:document.getElementById('sEmail').value,indirizzo:document.getElementById('sIndirizzo').value},
-    locali: sLocali.map(l=>({...l,lavori:[...l.lavori],lavoriQta:{...(l.lavoriQta||{})},serramenti:copiaSerramenti(l),condizioni:[...(l.condizioni||[])]})),
+    locali: sLocali.map(l=>({...l,lavori:[...l.lavori],lavoriQta:{...(l.lavoriQta||{})},lavoriCat:{...(l.lavoriCat||{})},serramenti:copiaSerramenti(l),condizioni:[...(l.condizioni||[])]})),
     supTot: sLocali.reduce((s,l)=>s+supLoc(l),0),
     condizioniGen: sCondizioni.slice(),
     condNoteGen: document.getElementById('sCondNote').value,
     condPerLocale: optCondPerLocale,
+    moduli: sModuli.slice(),
     note: document.getElementById('sNote').value,
     convertito: existing ? !!existing.convertito : false
   };

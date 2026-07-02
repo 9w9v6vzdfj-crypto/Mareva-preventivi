@@ -6,6 +6,13 @@ dal telefono: rilievo degli ambienti, lavorazioni con prezzi (e quantità per i
 mestieri tecnici), sconto/IVA, PDF stampabile con intestazione dell'impresa,
 archivio con stati (bozza / inviato / accettato / rifiutato).
 
+Il **muratore** può lavorare da impresa generale: nel documento si attivano i
+"moduli" degli altri mestieri (imbiancatura, elettrico, idraulico, serramenti)
+e le loro voci si aggiungono agli elenchi dei locali mantenendo le regole del
+mestiere d'origine (quantità × prezzo per le voci tecniche, sezione serramenti
+col disegno). Ogni voce importata ricorda la sua categoria (`loc.lavoriCat`) e
+il PDF mostra il **riepilogo per categoria** con i subtotali.
+
 Per il **serramentista** l'app genera il disegno tecnico in prospetto di
 finestre e porte (SVG, funzione pura `disegnoSerramento`): tipo, misure in mm,
 numero di ante e apertura per anta (battente dx/sx, vasistas, anta-ribalta,
