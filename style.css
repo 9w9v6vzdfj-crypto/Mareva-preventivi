@@ -314,3 +314,22 @@ input,select,textarea{-webkit-appearance:none}
 .account-menu-email{font-size:12px;color:var(--sub);padding:8px 10px;word-break:break-all;border-bottom:1px solid var(--border);margin-bottom:6px}
 .account-menu-item{display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;font-family:inherit;font-size:15px;font-weight:600;color:var(--text);padding:11px 10px;border-radius:8px}
 .account-menu-item:active{background:var(--bg)}
+
+/* ── SERRAMENTISTA: card serramento e disegno tecnico ── */
+.serr-card{
+  background:var(--white);
+  border:1.5px solid var(--border);
+  border-radius:10px;
+  padding:10px 12px;
+  margin-bottom:10px;
+}
+.serr-hdr{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.serr-title{font-size:13px;font-weight:700;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.serr-svg{
+  display:flex;justify-content:center;align-items:center;
+  padding:10px 6px;margin-bottom:10px;
+  background:var(--bg);
+  border:1px dashed var(--border);
+  border-radius:8px;
+}
+.serr-svg svg{max-width:100%;height:auto}

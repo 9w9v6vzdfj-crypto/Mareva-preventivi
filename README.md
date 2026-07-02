@@ -1,10 +1,18 @@
 # Facile Preventivo
 
-PWA per artigiani (imbianchino, muratore, elettricista, idraulico e mestiere
-libero) per gestire **sopralluoghi** e **preventivi** dal telefono: rilievo
-degli ambienti, lavorazioni con prezzi (e quantità per i mestieri tecnici),
-sconto/IVA, PDF stampabile con intestazione dell'impresa, archivio con stati
-(bozza / inviato / accettato / rifiutato).
+PWA per artigiani (imbianchino, muratore, elettricista, idraulico,
+serramentista e mestiere libero) per gestire **sopralluoghi** e **preventivi**
+dal telefono: rilievo degli ambienti, lavorazioni con prezzi (e quantità per i
+mestieri tecnici), sconto/IVA, PDF stampabile con intestazione dell'impresa,
+archivio con stati (bozza / inviato / accettato / rifiutato).
+
+Per il **serramentista** l'app genera il disegno tecnico in prospetto di
+finestre e porte (SVG, funzione pura `disegnoSerramento`): tipo, misure in mm,
+numero di ante e apertura per anta (battente dx/sx, vasistas, anta-ribalta,
+scorrevole, fissa), con la convenzione professionale — "V" tratteggiata col
+vertice sul lato cerniere, vasistas col vertice in basso, freccia per gli
+scorrevoli — e le quote. Il disegno compare nella card del locale e nei PDF
+di sopralluogo e preventivo.
 
 ## Com'è fatta
 
