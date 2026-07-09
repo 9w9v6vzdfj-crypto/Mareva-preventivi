@@ -2791,11 +2791,17 @@ function mockGuida(tipo){
 // ── Mini-tour contestuali: partono UNA volta, alla prima apertura della
 // pagina (flag mv_guida_s / mv_guida_p). Insegnano il percorso senza
 // frapporsi: il form resta l'interfaccia, niente wizard campo per campo.
+// NB: i passi con target nascosto (es. moduli: solo per il muratore) vengono
+// saltati automaticamente da Guida.avvia().
 const GUIDA_SOPRALLUOGO=[
   { el:'sCardCliente', page:'sopralluogo', titolo:'Dati del cliente',
     testo:'Parti da qui: basta il nome per poter salvare. Telefono e indirizzo del cantiere finiscono sulla scheda PDF.' },
   { el:'sTipoCollapse', titolo:'Tipologia struttura',
     testo:'Tocca la tendina per scegliere: appartamento, villa, ufficio, capannone…' },
+  { el:'sOptCondCard', titolo:'Condizioni per singolo locale',
+    testo:'Di norma lo stato/condizioni si annota una volta per tutto il lavoro. Con questo interruttore lo annoti invece locale per locale: la sezione compare dentro ogni ambiente.' },
+  { el:'sModuliCard', titolo:'Lavori di altri mestieri',
+    testo:'Fai anche lavori di altri mestieri? Attiva i moduli che ti servono (imbiancatura, elettrico, idraulico, serramenti): le loro voci compaiono negli elenchi dei locali, con le loro regole.' },
   { el:'sCardAmbienti', titolo:'Ambienti e lavorazioni',
     testo:'Scrivi il nome del locale (Camera, Bagno…) e "+ Aggiungi": dentro ogni locale metti misure e lavorazioni rilevate sul posto.' },
   { el:'sAzioni', titolo:'Quando hai finito',
@@ -2805,20 +2811,33 @@ const GUIDA_PREVENTIVO=[
   { el:'pCardCliente', page:'nuovo', titolo:'Dati del cliente',
     testo:'Se arrivi da un sopralluogo sono già compilati. Basta il nome per salvare: la bozza si salva da sola mentre scrivi.' },
   { el:'pCardOpzioni', titolo:'Impostazioni',
-    testo:'Manodopera e condizioni: generali per tutto il lavoro o per singolo locale, scegli tu con gli interruttori.' },
+    testo:'Due interruttori: manodopera per singolo locale (un prezzo di posa per ogni ambiente) e condizioni/stato per singolo locale (le annoti dentro ogni ambiente invece che in generale).' },
+  { el:'pModuliCard', titolo:'Lavori di altri mestieri',
+    testo:'Attiva i moduli degli altri mestieri: le loro voci entrano nel preventivo con quantità × prezzo dove serve, e il PDF mostra il riepilogo per categoria.' },
   { el:'pCardScontoIva', titolo:'Totali automatici',
     testo:'Metti i prezzi nei locali: subtotale, sconto, IVA e totale si aggiornano da soli in questo riquadro.' },
   { el:'pAzioni', titolo:'Anteprima e PDF',
     testo:'Controlla l\'anteprima e genera il PDF professionale da inviare al cliente. Lo ritrovi in Archivio, con il suo stato.' }
 ];
 
+// Un passo è mostrabile se non ha target oppure se il target esiste e non è
+// nascosto (es. la card moduli esiste solo per i mestieri che li importano,
+// quella delle condizioni non per il mestiere libero).
+function _passoVisibile(p){
+  if(!p.el) return true;
+  const el=document.getElementById(p.el);
+  return !!el && (!el.style || el.style.display!=='none');
+}
+
 const Guida={
   i:0, passi:GUIDA_PASSI, flag:'mv_guida',
   avvia(passi, flag){
-    this.passi = passi || GUIDA_PASSI;
+    const lista = passi || GUIDA_PASSI;
+    this.passi = lista.filter(_passoVisibile);
+    if(!this.passi.length) this.passi = lista;
     this.flag = flag || 'mv_guida';
     this.i=0;
-    if(this.passi===GUIDA_PASSI) goPage('dashboard');
+    if(lista===GUIDA_PASSI) goPage('dashboard');
     this._render();
   },
   chiudi(){
