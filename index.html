@@ -89,7 +89,7 @@
   <div class="prev-number" id="sopNum">📋 S–2026/001</div>
 
   <!-- CLIENTE -->
-  <div class="card">
+  <div class="card" id="sCardCliente">
     <div class="card-header">
       <div class="card-title"><div class="card-icon">👤</div> Dati cliente</div>
     </div>
@@ -149,7 +149,7 @@
   </div>
 
   <!-- AMBIENTI -->
-  <div class="card">
+  <div class="card" id="sCardAmbienti">
     <div class="card-header">
       <div class="card-title"><div class="card-icon">🏠</div> Ambienti e lavorazioni</div>
     </div>
@@ -201,7 +201,7 @@
   </div>
 
   <!-- AZIONI -->
-  <div class="btn-row" style="margin-bottom:24px">
+  <div class="btn-row" id="sAzioni" style="margin-bottom:24px">
     <button class="btn btn-secondary btn-sm" onclick="sResetForm()">🗑 Azzera</button>
     <button class="btn btn-secondary btn-sm" onclick="sSalva(event)">💾 Salva</button>
     <button class="btn btn-secondary btn-sm" onclick="sEsportaPDF()">⬇ PDF sopralluogo</button>
@@ -215,7 +215,7 @@
   <div class="prev-number" id="prevNum">📄 P–2026/001</div>
 
   <!-- CLIENTE -->
-  <div class="card">
+  <div class="card" id="pCardCliente">
     <div class="card-header">
       <div class="card-title"><div class="card-icon">👤</div> Dati cliente</div>
     </div>
@@ -251,7 +251,7 @@
   </div>
 
   <!-- IMPOSTAZIONI PREVENTIVO -->
-  <div class="card">
+  <div class="card" id="pCardOpzioni">
     <div class="card-header">
       <div class="card-title"><div class="card-icon">⚙️</div> Impostazioni</div>
     </div>
@@ -333,7 +333,7 @@
   </div>
 
   <!-- SCONTO / IVA -->
-  <div class="card">
+  <div class="card" id="pCardScontoIva">
     <div class="card-header">
       <div class="card-title"><div class="card-icon">💶</div> Sconto e IVA</div>
     </div>
@@ -379,7 +379,7 @@
   </div>
 
   <!-- AZIONI -->
-  <div class="btn-row" style="margin-bottom:24px">
+  <div class="btn-row" id="pAzioni" style="margin-bottom:24px">
     <button class="btn btn-secondary btn-sm" onclick="resetForm()">🗑 Azzera</button>
     <button class="btn btn-secondary btn-sm" onclick="salvaBozza(event)">💾 Salva</button>
     <button class="btn btn-primary btn-sm" onclick="apriAnteprima()">👁 Anteprima</button>
@@ -435,8 +435,12 @@
       <div class="card-title"><div class="card-icon">📖</div> Guida</div>
     </div>
     <div class="card-body">
-      <p style="font-size:13px;color:var(--sub);margin-bottom:10px">Rivedi il tour di benvenuto con i passaggi principali: sopralluogo, preventivo, PDF, archivio e sincronizzazione.</p>
-      <button class="btn btn-secondary btn-sm" onclick="Guida.avvia()">📖 Rivedi la guida</button>
+      <p style="font-size:13px;color:var(--sub);margin-bottom:10px">Rivedi il tour di benvenuto o le mini-guide delle pagine sopralluogo e preventivo.</p>
+      <div class="btn-row">
+        <button class="btn btn-secondary btn-sm" onclick="Guida.avvia()">📖 Benvenuto</button>
+        <button class="btn btn-secondary btn-sm" onclick="Guida.avvia(GUIDA_SOPRALLUOGO,'mv_guida_s')">📋 Sopralluogo</button>
+        <button class="btn btn-secondary btn-sm" onclick="Guida.avvia(GUIDA_PREVENTIVO,'mv_guida_p')">💶 Preventivo</button>
+      </div>
     </div>
   </div>
 

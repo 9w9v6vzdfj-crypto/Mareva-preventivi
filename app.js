@@ -420,9 +420,10 @@ const Store = {
 
   getMod(){ return parseInt(this._readRaw(this.KEYS.mod,'0'),10)||0; },
 
-  // Guida al primo utilizzo: vista una volta sola per dispositivo.
-  getGuidaVista(){ return this._readRaw(this.KEYS.guida,'')==='1'; },
-  setGuidaVista(){ return this._write(this.KEYS.guida,'1'); }
+  // Guide (tour benvenuto + mini-tour per pagina): viste una volta sola
+  // per dispositivo, ciascuna col proprio flag.
+  getGuidaVista(chiave){ return this._readRaw(chiave||this.KEYS.guida,'')==='1'; },
+  setGuidaVista(chiave){ return this._write(chiave||this.KEYS.guida,'1'); }
 };
 
 // ══════════════════════════════════════════════════════════
@@ -1008,6 +1009,9 @@ function goPage(name) {
   if(name==='sopralluogo' && !sEditId) sResetForm(true);
   if(name==='impostazioni') caricaImpresa();
   window.scrollTo(0,0);
+  // Mini-tour contestuale alla prima apertura della pagina
+  if(name==='sopralluogo') avviaGuidaPagina('s');
+  if(name==='nuovo') avviaGuidaPagina('p');
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2784,25 +2788,51 @@ function mockGuida(tipo){
   </svg>`;
 }
 
+// ── Mini-tour contestuali: partono UNA volta, alla prima apertura della
+// pagina (flag mv_guida_s / mv_guida_p). Insegnano il percorso senza
+// frapporsi: il form resta l'interfaccia, niente wizard campo per campo.
+const GUIDA_SOPRALLUOGO=[
+  { el:'sCardCliente', page:'sopralluogo', titolo:'Dati del cliente',
+    testo:'Parti da qui: basta il nome per poter salvare. Telefono e indirizzo del cantiere finiscono sulla scheda PDF.' },
+  { el:'sTipoCollapse', titolo:'Tipologia struttura',
+    testo:'Tocca la tendina per scegliere: appartamento, villa, ufficio, capannone…' },
+  { el:'sCardAmbienti', titolo:'Ambienti e lavorazioni',
+    testo:'Scrivi il nome del locale (Camera, Bagno…) e "+ Aggiungi": dentro ogni locale metti misure e lavorazioni rilevate sul posto.' },
+  { el:'sAzioni', titolo:'Quando hai finito',
+    testo:'Salva il sopralluogo, scaricane il PDF, oppure "Vai al preventivo": i dati passano da soli, a te restano solo i prezzi.' }
+];
+const GUIDA_PREVENTIVO=[
+  { el:'pCardCliente', page:'nuovo', titolo:'Dati del cliente',
+    testo:'Se arrivi da un sopralluogo sono già compilati. Basta il nome per salvare: la bozza si salva da sola mentre scrivi.' },
+  { el:'pCardOpzioni', titolo:'Impostazioni',
+    testo:'Manodopera e condizioni: generali per tutto il lavoro o per singolo locale, scegli tu con gli interruttori.' },
+  { el:'pCardScontoIva', titolo:'Totali automatici',
+    testo:'Metti i prezzi nei locali: subtotale, sconto, IVA e totale si aggiornano da soli in questo riquadro.' },
+  { el:'pAzioni', titolo:'Anteprima e PDF',
+    testo:'Controlla l\'anteprima e genera il PDF professionale da inviare al cliente. Lo ritrovi in Archivio, con il suo stato.' }
+];
+
 const Guida={
-  i:0,
-  avvia(){
+  i:0, passi:GUIDA_PASSI, flag:'mv_guida',
+  avvia(passi, flag){
+    this.passi = passi || GUIDA_PASSI;
+    this.flag = flag || 'mv_guida';
     this.i=0;
-    goPage('dashboard');
+    if(this.passi===GUIDA_PASSI) goPage('dashboard');
     this._render();
   },
   chiudi(){
     const ov=document.getElementById('guidaOverlay');
     if(ov) ov.remove();
-    Store.setGuidaVista();
+    Store.setGuidaVista(this.flag);
   },
   avanti(){
     this.i++;
-    if(this.i>=GUIDA_PASSI.length) this.chiudi();
+    if(this.i>=this.passi.length) this.chiudi();
     else this._render();
   },
   _render(){
-    const p=GUIDA_PASSI[this.i];
+    const p=this.passi[this.i];
     if(p.page) goPage(p.page);
     let ov=document.getElementById('guidaOverlay');
     if(!ov){
@@ -2814,46 +2844,53 @@ const Guida={
     const spot=document.getElementById('guidaSpot');
     const card=document.getElementById('guidaCard');
     const el=p.el?document.getElementById(p.el):null;
-    if(el && el.scrollIntoView){ try{ el.scrollIntoView({block:'center'}); }catch(e){} }
+    // behavior:'instant' scavalca lo scroll-behavior:smooth del CSS: le
+    // misure di spot e card vanno prese a scroll GIÀ fermo, non a metà corsa.
+    if(el && el.scrollIntoView){ try{ el.scrollIntoView({block:'center', behavior:'instant'}); }catch(e){ try{ el.scrollIntoView(); }catch(e2){} } }
     const self=this;
     setTimeout(function(){
-      // riflettore sull'elemento (senza target: foro di 0px = tutto scuro)
-      const r=(el && el.getBoundingClientRect)?el.getBoundingClientRect():null;
-      if(spot){
-        if(r){
-          spot.style.left=(r.left-6)+'px'; spot.style.top=(r.top-6)+'px';
-          spot.style.width=(r.width+12)+'px'; spot.style.height=(r.height+12)+'px';
-        } else {
-          spot.style.left='50%'; spot.style.top='45%';
-          spot.style.width='0px'; spot.style.height='0px';
-        }
-      }
       if(!card) return;
-      const ultimo=self.i===GUIDA_PASSI.length-1;
+      const ultimo=self.i===self.passi.length-1;
       card.innerHTML=`
         ${p.mock?`<div class="guida-mock">${mockGuida(p.mock)}</div>`:''}
         <div class="guida-titolo">${p.titolo}</div>
         <div class="guida-testo">${p.testo}</div>
         <div class="guida-footer">
-          <div class="guida-dots">${GUIDA_PASSI.map((_,j)=>`<span class="guida-dot${j===self.i?' on':''}"></span>`).join('')}</div>
+          <div class="guida-dots">${self.passi.map((_,j)=>`<span class="guida-dot${j===self.i?' on':''}"></span>`).join('')}</div>
           <div class="guida-btns">
             <button class="btn btn-secondary btn-sm" onclick="Guida.chiudi()">Salta</button>
             <button class="btn btn-primary btn-sm" onclick="Guida.avanti()">${ultimo?'Fine ✓':(self.i===0?'Inizia →':'Avanti →')}</button>
           </div>
         </div>`;
-      // posizione: sotto il target se c'è spazio, sopra altrimenti, centrata se nessun target
+      // posizione: sotto il target se c'è spazio, sopra altrimenti, centrata se
+      // nessun target. In ogni caso CLAMP dentro il viewport: la card coi
+      // bottoni non deve mai finire fuori schermo.
       card.style.visibility='hidden';
       setTimeout(function(){
         const ch=card.offsetHeight||230;
         const vh=(typeof window!=='undefined' && window.innerHeight)?window.innerHeight:640;
+        // rect misurato ORA, a scroll assestato: vale sia per il riflettore
+        // sia per la card (prima lo spot usava una misura piu' vecchia e
+        // poteva restare fuori posto).
+        const r2=(el && el.getBoundingClientRect)?el.getBoundingClientRect():null;
+        if(spot){
+          if(r2){
+            spot.style.left=(r2.left-6)+'px'; spot.style.top=(r2.top-6)+'px';
+            spot.style.width=(r2.width+12)+'px'; spot.style.height=(r2.height+12)+'px';
+          } else {
+            spot.style.left='50%'; spot.style.top='45%';
+            spot.style.width='0px'; spot.style.height='0px';
+          }
+        }
         let top;
-        if(!r) top=Math.max(20,(vh-ch)/2);
-        else if(r.bottom+12+ch < vh-12) top=r.bottom+12;
-        else top=Math.max(12, r.top-12-ch);
+        if(!r2) top=(vh-ch)/2;
+        else if(r2.bottom+12+ch < vh-12) top=r2.bottom+12;
+        else top=r2.top-12-ch;
+        top=Math.max(12, Math.min(top, vh-ch-12));
         card.style.top=top+'px';
         card.style.visibility='visible';
-      },30);
-    },80);
+      },60);
+    },120);
   }
 };
 // Primo avvio: mostra la guida una volta sola (dopo il login o, senza
@@ -2865,6 +2902,14 @@ function avviaGuidaPrimoUso(){
     if(Store.getGuidaVista() || document.getElementById('guidaOverlay')) return;
     Guida.avvia();
   }, 600);
+}
+// Mini-tour della pagina: solo alla PRIMA apertura di quella pagina.
+function avviaGuidaPagina(quale){
+  setTimeout(function(){
+    if(document.getElementById('guidaOverlay')) return; // un tour è già in corso
+    if(quale==='s' && !Store.getGuidaVista('mv_guida_s')) Guida.avvia(GUIDA_SOPRALLUOGO,'mv_guida_s');
+    if(quale==='p' && !Store.getGuidaVista('mv_guida_p')) Guida.avvia(GUIDA_PREVENTIVO,'mv_guida_p');
+  }, 450);
 }
 
 // ══════════════════════════════════════════════════════════
