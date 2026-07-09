@@ -109,6 +109,7 @@ document.addEventListener('click', function(){
 (function initAuth(){
   if(typeof firebase==='undefined' || !firebase.auth){
     mostraApp(); // Firebase non disponibile → app in modalità locale (come prima)
+    avviaGuidaPrimoUso();
     return;
   }
   try{ firebase.initializeApp(firebaseConfig); }catch(e){}
@@ -125,6 +126,7 @@ document.addEventListener('click', function(){
       }
       // Fase 3: dati dell'account sul cloud (se le regole Firestore sono pubblicate)
       Sync.avvia();
+      avviaGuidaPrimoUso();
     }else{
       Sync.spegni();
       mostraGate();
@@ -358,7 +360,7 @@ const PAGE_TITLES={dashboard:'Home',sopralluogo:'Sopralluogo',nuovo:'Preventivo'
 //  il resto dell'app non sa né dove né come i dati sono salvati.
 // ══════════════════════════════════════════════════════════
 const Store = {
-  KEYS: { prev:'mv_prev', sop:'mv_sop', impresa:'mv_impresa', mestiere:'mv_mestiere', lavoriCustom:'mv_lavori_custom', del:'mv_del', mod:'mv_mod' },
+  KEYS: { prev:'mv_prev', sop:'mv_sop', impresa:'mv_impresa', mestiere:'mv_mestiere', lavoriCustom:'mv_lavori_custom', del:'mv_del', mod:'mv_mod', guida:'mv_guida' },
 
   // -- uso interno: leggi un valore JSON in modo sicuro (se corrotto, usa il fallback) --
   _read(key, fallback){
@@ -416,7 +418,11 @@ const Store = {
     this.saveDel(d);
   },
 
-  getMod(){ return parseInt(this._readRaw(this.KEYS.mod,'0'),10)||0; }
+  getMod(){ return parseInt(this._readRaw(this.KEYS.mod,'0'),10)||0; },
+
+  // Guida al primo utilizzo: vista una volta sola per dispositivo.
+  getGuidaVista(){ return this._readRaw(this.KEYS.guida,'')==='1'; },
+  setGuidaVista(){ return this._write(this.KEYS.guida,'1'); }
 };
 
 // ══════════════════════════════════════════════════════════
@@ -2707,6 +2713,158 @@ function importaBackup(file){
     }
   };
   reader.readAsText(file);
+}
+
+// ══════════════════════════════════════════════════════════
+//  GUIDA AL PRIMO UTILIZZO
+//  Tour a passi: tooltip "a riflettore" sugli elementi veri della UI
+//  (spot con box-shadow gigante) + card con mockup illustrati.
+//  Parte una volta sola per dispositivo (mv_guida); si rivede da
+//  Impostazioni → Guida.
+// ══════════════════════════════════════════════════════════
+const GUIDA_PASSI=[
+  { titolo:'Benvenuto in Facile Preventivo! 👋',
+    testo:'In un minuto ti mostro come si lavora: sopralluogo dal cliente, preventivo coi prezzi, PDF pronto da firmare.',
+    mock:'flusso' },
+  { el:'mestiereRow', page:'dashboard', titolo:'1 · Scegli la tua attività',
+    testo:'L\'app si adatta al mestiere: elenchi lavori, misure, stato e PDF cambiano da soli. Il muratore può attivare anche i lavori degli altri mestieri (moduli).' },
+  { el:'sopList', page:'dashboard', titolo:'2 · Parti dal sopralluogo',
+    testo:'Dal cliente rilevi ambienti, misure e lavorazioni direttamente col telefono. Tocca "+ Nuovo" quando sei sul posto: al resto pensa l\'app.',
+    mock:'sopralluogo' },
+  { el:'tab-nuovo', page:'dashboard', titolo:'3 · Trasformalo in preventivo',
+    testo:'Con "Vai al preventivo" il sopralluogo si converte da solo: tu aggiungi i prezzi, sconto, IVA e totali si calcolano in automatico.',
+    mock:'preventivo' },
+  { el:'tab-lista', page:'dashboard', titolo:'4 · Archivio, stati e PDF',
+    testo:'Ogni preventivo ha uno stato (bozza, inviato, accettato, rifiutato), si duplica per lavori simili e diventa un PDF professionale con un tocco.',
+    mock:'pdf' },
+  { el:'tab-impostazioni', page:'dashboard', titolo:'5 · I dati della tua impresa',
+    testo:'Nome, P.IVA e contatti finiscono nell\'intestazione dei PDF. Qui trovi anche il backup e questa guida, se vorrai rivederla.' },
+  { el:'pageMenuBtn', page:'dashboard', titolo:'6 · Dati al sicuro ☁️',
+    testo:'Con l\'accesso, i documenti si sincronizzano sul cloud: li ritrovi su ogni dispositivo. Da qui controlli lo stato e "Sincronizza ora". Buon lavoro! 💪' }
+];
+
+// Mockup illustrativi (SVG inline, colori dell'app).
+function mockGuida(tipo){
+  const W=250,H=110;
+  const scheda=(x,e,lbl)=>`
+    <rect x="${x}" y="18" width="62" height="74" rx="8" fill="#fff" stroke="#E4E7EC" stroke-width="1.5"/>
+    <text x="${x+31}" y="50" text-anchor="middle" font-size="20">${e}</text>
+    <text x="${x+31}" y="80" text-anchor="middle" font-size="9" fill="#6B7280" font-weight="600">${lbl}</text>`;
+  const freccia=(x)=>`<text x="${x}" y="60" text-anchor="middle" font-size="14" fill="#2563EB" font-weight="700">→</text>`;
+  if(tipo==='flusso') return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+    ${scheda(8,'📋','Sopralluogo')}${freccia(85)}${scheda(94,'💶','Preventivo')}${freccia(171)}${scheda(180,'📄','PDF')}
+  </svg>`;
+  if(tipo==='sopralluogo') return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+    <rect x="30" y="8" width="190" height="94" rx="10" fill="#fff" stroke="#E4E7EC" stroke-width="1.5"/>
+    <text x="44" y="30" font-size="12" font-weight="700" fill="#111827">🛏 Camera</text>
+    <text x="200" y="30" font-size="10" fill="#2563EB" font-weight="700" text-anchor="end">31,3 m²</text>
+    ${[0,1,2].map(i=>`
+      <rect x="44" y="${40+i*18}" width="11" height="11" rx="3" fill="${i<2?'#2563EB':'#fff'}" stroke="#2563EB" stroke-width="1.3"/>
+      ${i<2?`<text x="49.5" y="${49+i*18}" text-anchor="middle" font-size="8" fill="#fff" font-weight="700">✓</text>`:''}
+      <rect x="62" y="${42+i*18}" width="${[96,72,84][i]}" height="7" rx="3.5" fill="#E4E7EC"/>`).join('')}
+  </svg>`;
+  if(tipo==='preventivo') return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+    <rect x="30" y="8" width="190" height="94" rx="10" fill="#fff" stroke="#E4E7EC" stroke-width="1.5"/>
+    ${[0,1].map(i=>`
+      <rect x="44" y="${20+i*16}" width="${[80,64][i]}" height="7" rx="3.5" fill="#E4E7EC"/>
+      <text x="206" y="${28+i*16}" text-anchor="end" font-size="10" fill="#111827" font-weight="600">€ ${['320,00','150,00'][i]}</text>`).join('')}
+    <rect x="40" y="56" width="170" height="34" rx="8" fill="#111827"/>
+    <text x="52" y="77" font-size="11" fill="#fff" font-weight="700">TOTALE</text>
+    <text x="200" y="77" text-anchor="end" font-size="12" fill="#60A5FA" font-weight="800">€ 573,40</text>
+  </svg>`;
+  // 'pdf'
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+    <rect x="85" y="6" width="80" height="98" rx="6" fill="#fff" stroke="#E4E7EC" stroke-width="1.5"/>
+    <rect x="93" y="14" width="42" height="8" rx="3" fill="#2563EB"/>
+    ${[0,1,2,3].map(i=>`<rect x="93" y="${30+i*11}" width="${[64,56,60,44][i]}" height="5" rx="2.5" fill="#E4E7EC"/>`).join('')}
+    <rect x="93" y="78" width="64" height="10" rx="3" fill="#111827"/>
+    <line x1="93" y1="97" x2="125" y2="97" stroke="#6B7280" stroke-width="1"/>
+    <text x="109" y="94" text-anchor="middle" font-size="6" fill="#9CA3AF">firma</text>
+    <text x="173" y="60" font-size="16">✅</text>
+  </svg>`;
+}
+
+const Guida={
+  i:0,
+  avvia(){
+    this.i=0;
+    goPage('dashboard');
+    this._render();
+  },
+  chiudi(){
+    const ov=document.getElementById('guidaOverlay');
+    if(ov) ov.remove();
+    Store.setGuidaVista();
+  },
+  avanti(){
+    this.i++;
+    if(this.i>=GUIDA_PASSI.length) this.chiudi();
+    else this._render();
+  },
+  _render(){
+    const p=GUIDA_PASSI[this.i];
+    if(p.page) goPage(p.page);
+    let ov=document.getElementById('guidaOverlay');
+    if(!ov){
+      ov=document.createElement('div');
+      ov.id='guidaOverlay';
+      ov.innerHTML='<div id="guidaSpot"></div><div id="guidaCard"></div>';
+      document.body.appendChild(ov);
+    }
+    const spot=document.getElementById('guidaSpot');
+    const card=document.getElementById('guidaCard');
+    const el=p.el?document.getElementById(p.el):null;
+    if(el && el.scrollIntoView){ try{ el.scrollIntoView({block:'center'}); }catch(e){} }
+    const self=this;
+    setTimeout(function(){
+      // riflettore sull'elemento (senza target: foro di 0px = tutto scuro)
+      const r=(el && el.getBoundingClientRect)?el.getBoundingClientRect():null;
+      if(spot){
+        if(r){
+          spot.style.left=(r.left-6)+'px'; spot.style.top=(r.top-6)+'px';
+          spot.style.width=(r.width+12)+'px'; spot.style.height=(r.height+12)+'px';
+        } else {
+          spot.style.left='50%'; spot.style.top='45%';
+          spot.style.width='0px'; spot.style.height='0px';
+        }
+      }
+      if(!card) return;
+      const ultimo=self.i===GUIDA_PASSI.length-1;
+      card.innerHTML=`
+        ${p.mock?`<div class="guida-mock">${mockGuida(p.mock)}</div>`:''}
+        <div class="guida-titolo">${p.titolo}</div>
+        <div class="guida-testo">${p.testo}</div>
+        <div class="guida-footer">
+          <div class="guida-dots">${GUIDA_PASSI.map((_,j)=>`<span class="guida-dot${j===self.i?' on':''}"></span>`).join('')}</div>
+          <div class="guida-btns">
+            <button class="btn btn-secondary btn-sm" onclick="Guida.chiudi()">Salta</button>
+            <button class="btn btn-primary btn-sm" onclick="Guida.avanti()">${ultimo?'Fine ✓':(self.i===0?'Inizia →':'Avanti →')}</button>
+          </div>
+        </div>`;
+      // posizione: sotto il target se c'è spazio, sopra altrimenti, centrata se nessun target
+      card.style.visibility='hidden';
+      setTimeout(function(){
+        const ch=card.offsetHeight||230;
+        const vh=(typeof window!=='undefined' && window.innerHeight)?window.innerHeight:640;
+        let top;
+        if(!r) top=Math.max(20,(vh-ch)/2);
+        else if(r.bottom+12+ch < vh-12) top=r.bottom+12;
+        else top=Math.max(12, r.top-12-ch);
+        card.style.top=top+'px';
+        card.style.visibility='visible';
+      },30);
+    },80);
+  }
+};
+// Primo avvio: mostra la guida una volta sola (dopo il login o, senza
+// Firebase, appena l'app è visibile).
+function avviaGuidaPrimoUso(){
+  // Tutto dentro il timeout: initAuth gira in cima al file, prima che
+  // Store (piu' sotto) sia inizializzato — qui fuori non si tocca nulla.
+  setTimeout(function(){
+    if(Store.getGuidaVista() || document.getElementById('guidaOverlay')) return;
+    Guida.avvia();
+  }, 600);
 }
 
 // ══════════════════════════════════════════════════════════
