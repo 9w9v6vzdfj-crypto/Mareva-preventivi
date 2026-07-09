@@ -40,7 +40,7 @@ function loadApp(seed) {
     setTimeout: noop, clearTimeout: noop, alert: noop, confirm: () => true,
   };
   sb.document = { getElementById: mk, createElement: () => mk('x'), querySelectorAll: () => [], querySelector: () => null, addEventListener: noop, body: mk('body') };
-  sb.window = sb; sb.window.addEventListener = noop; sb.navigator = {}; sb.globalThis = sb;
+  sb.window = sb; sb.window.addEventListener = noop; sb.scrollTo = noop; sb.navigator = {}; sb.globalThis = sb;
   sb.localStorage = { getItem: (k) => (k in seed ? seed[k] : null), setItem: (k, v) => { seed[k] = String(v); }, removeItem: (k) => { delete seed[k]; } };
   sb.Blob = function (p) { this._ = p.join(''); };
   sb.URL = { createObjectURL: (b) => { sb._json = b._; return 'blob:x'; }, revokeObjectURL: noop };
@@ -215,6 +215,21 @@ try {
     && delFusi.length === 2 && delFusi.find(t => t.id === '9').ts === 4;
   check('Sync: fusione per id e tombstone eliminazioni', ok, `fusi=${JSON.stringify(byId)} vivi=${vivi}`);
 } catch (e) { check('Sync: fusione per id e tombstone eliminazioni', false, e.message); }
+
+// 10) Guida al primo utilizzo: ogni passo punta a un elemento che esiste
+//     davvero in index.html, e avvio/avanzamento/chiusura non crashano.
+try {
+  const sb = loadApp({});
+  boot(sb);
+  const html = fs.readFileSync(require('path').join(__dirname, 'index.html'), 'utf8');
+  const passi = JSON.parse(vm.runInContext('JSON.stringify(GUIDA_PASSI)', sb));
+  const targetsOk = passi.every(p => !p.el || html.includes('id="' + p.el + '"'));
+  const mockOk = ['flusso', 'sopralluogo', 'preventivo', 'pdf'].every(m => vm.runInContext(`mockGuida('${m}')`, sb).includes('<svg'));
+  vm.runInContext('Guida.avvia(); Guida.avanti(); Guida.chiudi();', sb);
+  const vista = vm.runInContext('Store.getGuidaVista()', sb);
+  check('Guida primo utilizzo: passi, mockup e ciclo di vita', passi.length >= 6 && targetsOk && mockOk && vista === true,
+    `passi=${passi.length} targetsOk=${targetsOk} mockOk=${mockOk} vista=${vista}`);
+} catch (e) { check('Guida primo utilizzo: passi, mockup e ciclo di vita', false, e.message); }
 
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);

@@ -361,3 +361,30 @@ input,select,textarea{-webkit-appearance:none}
   border-bottom:1px solid var(--border);
   line-height:1.4;
 }
+
+/* ── GUIDA AL PRIMO UTILIZZO (tour con riflettore + card) ── */
+#guidaOverlay{position:fixed;inset:0;z-index:400}
+#guidaSpot{
+  position:fixed;
+  border-radius:12px;
+  border:2px solid rgba(255,255,255,.9);
+  box-shadow:0 0 0 9999px rgba(17,24,39,.68);
+  transition:all .28s ease;
+  pointer-events:none;
+}
+#guidaCard{
+  position:fixed;left:50%;transform:translateX(-50%);
+  width:min(360px, calc(100vw - 32px));
+  background:#fff;border-radius:14px;padding:16px;
+  box-shadow:0 8px 30px rgba(0,0,0,.3);
+  transition:top .28s ease;
+}
+.guida-mock{display:flex;justify-content:center;margin-bottom:10px;background:var(--bg);border-radius:10px;padding:6px 0}
+.guida-mock svg{max-width:100%;height:auto}
+.guida-titolo{font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px}
+.guida-testo{font-size:13.5px;color:var(--sub);line-height:1.5;margin-bottom:14px}
+.guida-footer{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.guida-dots{display:flex;gap:5px;flex-shrink:0}
+.guida-dot{width:7px;height:7px;border-radius:50%;background:var(--border)}
+.guida-dot.on{background:var(--accent)}
+.guida-btns{display:flex;gap:8px}
