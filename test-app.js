@@ -222,14 +222,15 @@ try {
   const sb = loadApp({});
   boot(sb);
   const html = fs.readFileSync(require('path').join(__dirname, 'index.html'), 'utf8');
-  const passi = JSON.parse(vm.runInContext('JSON.stringify(GUIDA_PASSI)', sb));
-  const targetsOk = passi.every(p => !p.el || html.includes('id="' + p.el + '"'));
+  const tuttiPassi = JSON.parse(vm.runInContext('JSON.stringify([].concat(GUIDA_PASSI, GUIDA_SOPRALLUOGO, GUIDA_PREVENTIVO))', sb));
+  const targetsOk = tuttiPassi.every(p => !p.el || html.includes('id="' + p.el + '"'));
   const mockOk = ['flusso', 'sopralluogo', 'preventivo', 'pdf'].every(m => vm.runInContext(`mockGuida('${m}')`, sb).includes('<svg'));
   vm.runInContext('Guida.avvia(); Guida.avanti(); Guida.chiudi();', sb);
-  const vista = vm.runInContext('Store.getGuidaVista()', sb);
-  check('Guida primo utilizzo: passi, mockup e ciclo di vita', passi.length >= 6 && targetsOk && mockOk && vista === true,
-    `passi=${passi.length} targetsOk=${targetsOk} mockOk=${mockOk} vista=${vista}`);
-} catch (e) { check('Guida primo utilizzo: passi, mockup e ciclo di vita', false, e.message); }
+  vm.runInContext("Guida.avvia(GUIDA_SOPRALLUOGO,'mv_guida_s'); Guida.chiudi();", sb);
+  const vista = vm.runInContext("Store.getGuidaVista() && Store.getGuidaVista('mv_guida_s')", sb);
+  check('Guide: passi validi (3 tour), mockup e ciclo di vita', tuttiPassi.length >= 14 && targetsOk && mockOk && vista === true,
+    `passi=${tuttiPassi.length} targetsOk=${targetsOk} mockOk=${mockOk} vista=${vista}`);
+} catch (e) { check('Guide: passi validi (3 tour), mockup e ciclo di vita', false, e.message); }
 
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);
