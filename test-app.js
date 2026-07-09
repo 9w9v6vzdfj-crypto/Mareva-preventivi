@@ -228,7 +228,7 @@ try {
   vm.runInContext('Guida.avvia(); Guida.avanti(); Guida.chiudi();', sb);
   vm.runInContext("Guida.avvia(GUIDA_SOPRALLUOGO,'mv_guida_s'); Guida.chiudi();", sb);
   const vista = vm.runInContext("Store.getGuidaVista() && Store.getGuidaVista('mv_guida_s')", sb);
-  check('Guide: passi validi (3 tour), mockup e ciclo di vita', tuttiPassi.length >= 14 && targetsOk && mockOk && vista === true,
+  check('Guide: passi validi (3 tour), mockup e ciclo di vita', tuttiPassi.length >= 17 && targetsOk && mockOk && vista === true,
     `passi=${tuttiPassi.length} targetsOk=${targetsOk} mockOk=${mockOk} vista=${vista}`);
 } catch (e) { check('Guide: passi validi (3 tour), mockup e ciclo di vita', false, e.message); }
 
