@@ -1,45 +1,30 @@
-# DA FARE — passi che richiedono l'accesso a Firebase Console
+# DA FARE — stato e prossimi passi
 
-Il codice della sincronizzazione cloud è già pubblicato e **si attiva da solo**
-appena completi i punti 1 e 2 (5 minuti in tutto). Fino ad allora l'app
-continua a funzionare in locale come sempre; nel menu account (in alto a
-destra) vedi lo stato: "⚠️ Cloud non attivo" → "☁️ Sincronizzato".
+## ✅ Fatto
 
-## 1. Pubblica le regole Firestore (obbligatorio per la sync)
+- **Regole Firestore pubblicate** (verificato): ogni utente legge/scrive solo
+  i propri dati; la **sincronizzazione cloud è attiva**. Nel menu account
+  (in alto a destra) lo stato deve dire "☁️ Sincronizzato · HH:MM".
+- **Login Google: rinunciato per scelta** — il bottone è stato rimosso dal
+  cancello d'accesso. Email/password + recupero password coprono tutto.
 
-1. Apri [Firebase Console](https://console.firebase.google.com) → progetto **facile-preventivo**.
-2. Menu a sinistra: **Firestore Database** → scheda **Regole** (Rules).
-3. Cancella il contenuto e incolla il testo del file [`firestore.rules`](firestore.rules) di questo repository.
-4. Premi **Pubblica**.
+## Per riattivare il login Google (solo se un giorno servirà)
 
-Le regole dicono: ogni utente autenticato legge/scrive solo `users/{suo uid}/…`.
-Nessuno può vedere i dati degli altri.
+1. Firebase Console → **Authentication** → **Sign-in method** → abilita
+   **Google** (interruttore "Attiva" + email di assistenza + Salva).
+2. **Authentication → Settings → Authorized domains** → aggiungi il dominio
+   GitHub Pages del sito (es. `TUOACCOUNT.github.io`).
+3. Ripristina il bottone in `index.html` (è lì, commentato, con le istruzioni).
 
-## 2. Autorizza il dominio del sito (ripara "Accedi con Google")
+## Per la vendita
 
-1. Firebase Console → **Authentication** → **Settings** → **Authorized domains**.
-2. **Add domain** → aggiungi il dominio da cui è servita l'app
-   (il dominio GitHub Pages, es. `TUOACCOUNT.github.io`).
-
-Senza questo, il bottone "Accedi con Google" fallisce con
-*unauthorized-domain* (email e password funzionano comunque).
-
-## 3. Verifica (1 minuto)
-
-1. Apri l'app, accedi, tocca il menu in alto a destra: deve dire
-   **"☁️ Sincronizzato · HH:MM"** (se dice "Cloud non attivo", tocca
-   "🔄 Sincronizza ora" dopo aver pubblicato le regole).
-2. Accedi con lo stesso account da un secondo dispositivo/browser:
-   i preventivi devono comparire.
-
-## Più avanti — per la vendita (non urgente)
-
-- **Pagamenti**: Stripe per abbonamento web (o acquisti in-app se si va
-  sugli store). Le regole Firestore potranno verificare lo stato
-  dell'abbonamento, così il "paga per usare" è imposto dal server.
+- **Pagamenti (Stripe)**: apri un account su stripe.com con i dati della tua
+  attività. Con le chiavi API si integra il checkout/abbonamento e le regole
+  Firestore verificheranno lo stato "abbonato" lato server.
 - **Legale (GDPR)**: privacy policy (si raccolgono email; Firebase/Google è
-  responsabile del trattamento), termini di servizio, recesso digitale,
-  P.IVA/fatturazione. Da far revisionare a un professionista.
+  responsabile del trattamento) e termini di servizio. Servono: ragione
+  sociale, P.IVA, indirizzo, email di contatto. Bozze preparabili, poi da far
+  revisionare a un professionista. Fatturazione incassi: commercialista.
 
 ## Note tecniche sulla sync (per riferimento)
 
