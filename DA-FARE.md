@@ -18,13 +18,17 @@
 
 ## Per la vendita
 
-- **Pagamenti (Stripe)**: apri un account su stripe.com con i dati della tua
-  attività. Con le chiavi API si integra il checkout/abbonamento e le regole
-  Firestore verificheranno lo stato "abbonato" lato server.
-- **Legale (GDPR)**: privacy policy (si raccolgono email; Firebase/Google è
-  responsabile del trattamento) e termini di servizio. Servono: ragione
-  sociale, P.IVA, indirizzo, email di contatto. Bozze preparabili, poi da far
-  revisionare a un professionista. Fatturazione incassi: commercialista.
+- **Pagamenti (Stripe)** — ⬜ unico passo tecnico rimasto: apri un account su
+  stripe.com con i dati della tua attività. Con le chiavi API si integra il
+  checkout/abbonamento e le regole Firestore verificheranno lo stato
+  "abbonato" lato server.
+- **Legale (GDPR)** — ✅ bozze pubblicate: `privacy.html` e `termini.html`,
+  intestate a MOI DOM di Lyakhu Liya (P.IVA 13001710964, PEC), linkate dal
+  cancello d'accesso e da Impostazioni → Informazioni legali. Da completare:
+  1. aggiungere l'**indirizzo della sede** nel riquadro del titolare di
+     entrambe le pagine;
+  2. **far revisionare i testi a un professionista** prima di incassare;
+  3. fatturazione degli incassi: commercialista.
 
 ## Note tecniche sulla sync (per riferimento)
 
