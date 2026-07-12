@@ -508,6 +508,7 @@ const Sync = {
         self._unisci(remoto, dati.aggiornato||0);
       }
       self.attivo=true;
+      Abbo.refresh(); // stato abbonamento (se il gating è attivo)
       return self._push();
     }).catch(function(e){
       self.attivo=false;
@@ -540,6 +541,13 @@ const Sync = {
         lavoriCustom[k]=[...new Set([...(lavoriCustom[k]||[]), ...(remoto.lavoriCustom[k]||[])])];
       });
     }
+    // contatore preventivi creati (per il piano gratuito): vale il massimo,
+    // così cancellare documenti o cambiare dispositivo non azzera il conteggio
+    if(remoto.stat && typeof remoto.stat==='object'){
+      const st=Store._read('mv_stat',{prevCreati:0});
+      st.prevCreati=Math.max(st.prevCreati||0, remoto.stat.prevCreati||0);
+      Store._write('mv_stat', st);
+    }
     Store.savePreventivi(preventivi);
     Store.saveSopralluoghi(sopralluoghi);
     Store.saveImpresa(impresa);
@@ -558,7 +566,8 @@ const Sync = {
     const ref=this._ref();
     if(!ref || !this.attivo) return Promise.resolve();
     const json=JSON.stringify({
-      prev:preventivi, sop:sopralluoghi, impresa, mestiere, lavoriCustom, del:Store.loadDel()
+      prev:preventivi, sop:sopralluoghi, impresa, mestiere, lavoriCustom,
+      del:Store.loadDel(), stat:Store._read('mv_stat',{prevCreati:0})
     });
     if(json.length>900000){ this._setStato('pieno'); return Promise.resolve(); }
     const self=this;
@@ -587,6 +596,7 @@ const Sync = {
     const m=document.getElementById('accountMenu'); if(m) m.style.display='none';
     if(!this.attivo){ this.avvia(); return; }
     const self=this;
+    Abbo.refresh();
     this._setStato('lavoro');
     this._push().catch(function(e){
       self._setStato(e && e.code==='permission-denied' ? 'regole' : 'errore');
@@ -776,7 +786,8 @@ function autoSalva(){
     const d=getDati();
     if(!d.cliente.nome) return; // non salvare se manca il nome
     const i=preventivi.findIndex(p=>p.id===d.id);
-    if(i>=0) preventivi[i]=d; else preventivi.push(d);
+    if(i<0 && !Abbo.puoCreare()){ Abbo.paywallSoft(); return; }
+    if(i>=0) preventivi[i]=d; else { preventivi.push(d); Abbo.registraCreazione(); }
     Store.savePreventivi(preventivi);
     editId=d.id;
   }, 2000);
@@ -1988,6 +1999,8 @@ function eliminaSopralluogo(id){
 function sConvertiInPreventivo(){
   const nome=document.getElementById('sNome').value;
   if(!nome){alert('Inserisci almeno il nome del cliente prima di procedere.');return;}
+  // Il preventivo che nascerà dalla conversione conta come nuovo documento.
+  if(!Abbo.puoCreare()){ Abbo.paywall(); return; }
   // assicura salvataggio prima della conversione
   const _esist = sEditId ? sopralluoghi.find(s=>s.id===sEditId) : null;
   const d={
@@ -2146,7 +2159,8 @@ function salvaBozza(ev){
   const d=getDati();
   if(!d.cliente.nome){alert('Inserisci il nome del cliente.');return;}
   const i=preventivi.findIndex(p=>p.id===d.id);
-  if(i>=0) preventivi[i]=d; else preventivi.push(d);
+  if(i<0 && !Abbo.puoCreare()){ Abbo.paywall(); return; }
+  if(i>=0) preventivi[i]=d; else { preventivi.push(d); Abbo.registraCreazione(); }
   Store.savePreventivi(preventivi);
   editId=d.id;
   const btn=ev&&ev.target?ev.target.closest('button'):null;
@@ -2434,7 +2448,8 @@ function esportaPDF(){
   const d=getDati();
   if(d.cliente.nome){
     const i=preventivi.findIndex(p=>p.id===d.id);
-    if(i>=0) preventivi[i]=d; else preventivi.push(d);
+    if(i<0 && !Abbo.puoCreare()){ Abbo.paywall(); return; }
+    if(i>=0) preventivi[i]=d; else { preventivi.push(d); Abbo.registraCreazione(); }
     Store.savePreventivi(preventivi);
     editId=d.id;
   }
@@ -2633,6 +2648,7 @@ function cambiaStato(id,stato){
 // Utile per lavori simili (stesso condominio, stessi prezzi): si apre
 // subito in modifica.
 function duplicaPrev(id){
+  if(!Abbo.puoCreare()){ Abbo.paywall(); return; }
   const p=preventivi.find(x=>String(x.id)===String(id)); if(!p) return;
   const copia=JSON.parse(JSON.stringify(p));
   copia.id=Date.now();
@@ -2642,6 +2658,7 @@ function duplicaPrev(id){
   copia.stato='bozza';
   copia.mod=Date.now();
   preventivi.push(copia);
+  Abbo.registraCreazione();
   Store.savePreventivi(preventivi);
   apriPrev(copia.id);
 }
@@ -2718,6 +2735,125 @@ function importaBackup(file){
   };
   reader.readAsText(file);
 }
+
+// ══════════════════════════════════════════════════════════
+//  ABBONAMENTO — Stripe via estensione Firebase "Run Payments with Stripe"
+//  Modello: gratis fino a LIMITE_PREV_GRATIS preventivi (i sopralluoghi
+//  sono sempre illimitati), poi abbonamento mensile o annuale.
+//  Il blocco è SPENTO finché i price ID qui sotto restano vuoti: l'app
+//  resta gratuita e identica. Quando l'estensione è installata e i prezzi
+//  creati su Stripe, basta compilare STRIPE_PREZZI per attivare tutto.
+// ══════════════════════════════════════════════════════════
+const STRIPE_PREZZI = {
+  mensile: '',  // price_...  (da Stripe → Prodotti → Facile Preventivo)
+  annuale: ''   // price_...
+};
+const LIMITE_PREV_GRATIS = 5;
+
+const Abbo = {
+  _softMostrato:false,
+
+  gatingAttivo(){ return !!(STRIPE_PREZZI.mensile || STRIPE_PREZZI.annuale); },
+  usati(){ return (Store._read('mv_stat',{prevCreati:0}).prevCreati)||0; },
+  rimasti(){ return Math.max(0, LIMITE_PREV_GRATIS - this.usati()); },
+  attivo(){
+    const s=Store._read('mv_abbo',{attivo:false,fine:0});
+    return !!s.attivo && (!s.fine || s.fine > Date.now());
+  },
+  // Può creare un NUOVO preventivo? (quelli esistenti restano sempre
+  // apribili, modificabili ed esportabili: i dati sono dell'utente)
+  puoCreare(){
+    return !this.gatingAttivo() || this.attivo() || this.usati() < LIMITE_PREV_GRATIS;
+  },
+  registraCreazione(){
+    const st=Store._read('mv_stat',{prevCreati:0});
+    st.prevCreati=(st.prevCreati||0)+1;
+    Store._write('mv_stat', st);
+    this.aggiornaCard();
+  },
+
+  // Stato abbonamento dal cloud (scritto dall'estensione Stripe).
+  refresh(){
+    const db=Sync._db();
+    if(!db || !currentUser || !this.gatingAttivo()) return;
+    const self=this;
+    db.collection('customers').doc(currentUser.uid).collection('subscriptions')
+      .where('status','in',['trialing','active']).get()
+      .then(function(qs){
+        let attivo=false, fine=0;
+        qs.forEach(function(d){
+          attivo=true;
+          const p=(d.data()||{}).current_period_end;
+          const t=(p && p.seconds) ? p.seconds*1000 : 0;
+          if(t>fine) fine=t;
+        });
+        Store._write('mv_abbo',{attivo,fine});
+        self.aggiornaCard();
+      })
+      .catch(function(){ /* estensione non ancora installata: ignora */ });
+  },
+
+  // Checkout Stripe: si crea un doc in checkout_sessions e l'estensione
+  // risponde con l'URL della pagina di pagamento.
+  checkout(tipo){
+    const price=STRIPE_PREZZI[tipo];
+    if(!price) return;
+    const db=Sync._db();
+    if(!db || !currentUser){ alert('Per abbonarti devi prima accedere con la tua email.'); return; }
+    const btns=document.getElementById('abboBtns');
+    if(btns) btns.style.opacity='.5';
+    const ref=db.collection('customers').doc(currentUser.uid).collection('checkout_sessions').doc();
+    ref.set({ price, mode:'subscription', allow_promotion_codes:true,
+              success_url: location.href, cancel_url: location.href })
+      .then(function(){
+        ref.onSnapshot(function(snap){
+          const d=snap.data()||{};
+          if(d.error){ if(btns) btns.style.opacity=''; alert('Errore pagamento: '+d.error.message); }
+          if(d.url) location.assign(d.url);
+        });
+      })
+      .catch(function(e){
+        if(btns) btns.style.opacity='';
+        alert('Impossibile avviare il pagamento: '+(e && e.message ? e.message : e));
+      });
+  },
+
+  paywall(){
+    const m=document.getElementById('abboModal');
+    if(!m) return;
+    const u=document.getElementById('abboModalUsati');
+    if(u) u.textContent=`Hai usato ${Math.min(this.usati(),LIMITE_PREV_GRATIS)} preventivi gratuiti su ${LIMITE_PREV_GRATIS}.`;
+    m.style.display='block';
+  },
+  chiudiPaywall(){
+    const m=document.getElementById('abboModal');
+    if(m) m.style.display='none';
+  },
+  // Versione "gentile" per l'auto-salvataggio: mostra il paywall una sola
+  // volta per sessione invece di riproporlo a ogni battitura.
+  paywallSoft(){
+    if(this._softMostrato) return;
+    this._softMostrato=true;
+    this.paywall();
+  },
+
+  // Card "Abbonamento" in Impostazioni: visibile solo a gating attivo.
+  aggiornaCard(){
+    const card=document.getElementById('abboCard');
+    if(!card) return;
+    card.style.display=this.gatingAttivo()?'':'none';
+    const st=document.getElementById('abboStato');
+    if(!st) return;
+    if(this.attivo()){
+      const s=Store._read('mv_abbo',{fine:0});
+      st.textContent='✅ Abbonamento attivo'+(s.fine?(' · rinnovo '+new Date(s.fine).toLocaleDateString('it-IT')):'');
+      const b=document.getElementById('abboBtns'); if(b) b.style.display='none';
+    } else {
+      st.textContent=`Piano gratuito: ${Math.min(this.usati(),LIMITE_PREV_GRATIS)}/${LIMITE_PREV_GRATIS} preventivi usati`+(this.rimasti()?` (${this.rimasti()} rimasti)`:' — limite raggiunto');
+      const b=document.getElementById('abboBtns'); if(b) b.style.display='';
+    }
+  }
+};
 
 // ══════════════════════════════════════════════════════════
 //  GUIDA AL PRIMO UTILIZZO
@@ -2941,6 +3077,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   sResetForm(true);
   aggStats();
   caricaImpresa();
+  Abbo.aggiornaCard();
   // PWA — registra service worker e gestisce gli aggiornamenti
   if('serviceWorker' in navigator){
     let _reloading=false;

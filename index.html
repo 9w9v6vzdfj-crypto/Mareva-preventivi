@@ -435,6 +435,19 @@
     </div>
   </div>
 
+  <div class="card" id="abboCard" style="display:none">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">⭐</div> Abbonamento</div>
+    </div>
+    <div class="card-body">
+      <p style="font-size:13px;font-weight:600;margin-bottom:10px" id="abboStato">—</p>
+      <div class="btn-row" id="abboBtns">
+        <button class="btn btn-primary btn-sm" onclick="Abbo.checkout('annuale')">⭐ Annuale</button>
+        <button class="btn btn-secondary btn-sm" onclick="Abbo.checkout('mensile')">Mensile</button>
+      </div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-header">
       <div class="card-title"><div class="card-icon">⚖️</div> Informazioni legali</div>
@@ -532,6 +545,21 @@
       <button class="btn btn-secondary btn-sm" onclick="chiudiAnteprima()">Chiudi</button>
       <button class="btn btn-success btn-sm" onclick="apriPdfPreventivo()">⬇ Apri PDF</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL PAYWALL (piano gratuito esaurito) -->
+<div id="abboModal" style="display:none;position:fixed;inset:0;background:rgba(17,24,39,.6);z-index:250;overflow-y:auto;padding:24px 16px">
+  <div class="abbo-box">
+    <div class="abbo-icona">🔓</div>
+    <div class="abbo-titolo">Passa al piano completo</div>
+    <p class="abbo-testo" id="abboModalUsati">Hai usato i preventivi gratuiti.</p>
+    <p class="abbo-testo">Con l'abbonamento crei <strong>preventivi illimitati</strong>, con PDF professionali, disegni tecnici e sincronizzazione su tutti i tuoi dispositivi. I sopralluoghi restano sempre gratis, e i documenti già creati restano tuoi.</p>
+    <div class="abbo-btns" id="abboModalBtns">
+      <button class="btn btn-primary btn-full" onclick="Abbo.checkout('annuale')">Annuale — il più conveniente</button>
+      <button class="btn btn-secondary btn-full" onclick="Abbo.checkout('mensile')">Mensile</button>
+    </div>
+    <button class="abbo-nonora" onclick="Abbo.chiudiPaywall()">Non ora</button>
   </div>
 </div>
 

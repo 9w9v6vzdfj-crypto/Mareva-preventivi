@@ -18,10 +18,23 @@
 
 ## Per la vendita
 
-- **Pagamenti (Stripe)** — ⬜ unico passo tecnico rimasto: apri un account su
-  stripe.com con i dati della tua attività. Con le chiavi API si integra il
-  checkout/abbonamento e le regole Firestore verificheranno lo stato
-  "abbonato" lato server.
+- **Pagamenti (Stripe)** — il codice è pronto e SPENTO: si attiva compilando
+  `STRIPE_PREZZI` in `app.js`. Modello scelto: gratis fino a 5 preventivi
+  (sopralluoghi illimitati), poi abbonamento mensile o annuale. Passi:
+  1. ⬜ **Firebase → piano Blaze** (pay-as-you-go; ai tuoi volumi ~0€,
+     imposta un budget alert).
+  2. ⬜ **Firebase Console → Extensions → "Run Payments with Stripe"**:
+     installala incollando una **chiave API ristretta** di Stripe (creata in
+     sandbox dal dashboard Stripe). ⚠️ Le chiavi segrete NON vanno mai
+     condivise in chat: si incollano solo lì.
+  3. ⬜ **Stripe (sandbox) → Prodotti**: crea "Facile Preventivo" con due
+     prezzi ricorrenti (mensile e annuale). Copia i due **price ID**
+     (`price_…`, non sono segreti) e passali a Claude: verranno inseriti in
+     `STRIPE_PREZZI` e il paywall si accende.
+  4. ⬜ **Ri-pubblica `firestore.rules`** (aggiornate con le collezioni
+     dell'estensione: customers/checkout_sessions/subscriptions/products).
+  5. ⬜ Test in sandbox con carta di prova `4242 4242 4242 4242`, poi
+     passaggio alle chiavi live per incassare davvero.
 - **Legale (GDPR)** — ✅ bozze pubblicate: `privacy.html` e `termini.html`,
   intestate a MOI DOM di Lyakhu Liya (P.IVA 13001710964, PEC), linkate dal
   cancello d'accesso e da Impostazioni → Informazioni legali.
