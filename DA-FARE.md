@@ -24,11 +24,12 @@
   "abbonato" lato server.
 - **Legale (GDPR)** — ✅ bozze pubblicate: `privacy.html` e `termini.html`,
   intestate a MOI DOM di Lyakhu Liya (P.IVA 13001710964, PEC), linkate dal
-  cancello d'accesso e da Impostazioni → Informazioni legali. Da completare:
-  1. aggiungere l'**indirizzo della sede** nel riquadro del titolare di
-     entrambe le pagine;
-  2. **far revisionare i testi a un professionista** prima di incassare;
-  3. fatturazione degli incassi: commercialista.
+  cancello d'accesso e da Impostazioni → Informazioni legali.
+  - Indirizzo della sede: **per scelta non esposto** (il domicilio fiscale
+    coincide con l'abitazione); P.IVA + PEC identificano e rendono
+    contattabile il titolare. Da riconsiderare col professionista se serve.
+  - Da fare: **far revisionare i testi a un professionista** prima di
+    incassare; fatturazione degli incassi: commercialista.
 
 ## Note tecniche sulla sync (per riferimento)
 
