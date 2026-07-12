@@ -32,8 +32,11 @@
     <button class="btn btn-primary btn-full" id="btnAccedi" onclick="accedi()">Accedi</button>
     <button class="btn btn-secondary btn-full" id="btnCrea" onclick="creaAccount()" style="margin-top:8px">Crea un nuovo account</button>
 
-    <div class="auth-or">oppure</div>
-    <button class="btn btn-secondary btn-full" id="btnGoogle" onclick="accediGoogle()">Accedi con Google</button>
+    <!-- Login Google rimosso per scelta: per riattivarlo servono (1) provider
+         Google abilitato in Firebase Console, (2) dominio del sito tra gli
+         Authorized domains, (3) ripristinare qui il bottone:
+         <div class="auth-or">oppure</div>
+         <button class="btn btn-secondary btn-full" id="btnGoogle" onclick="accediGoogle()">Accedi con Google</button> -->
 
     <div class="auth-busy" id="authBusy" style="display:none">Attendere…</div>
   </div>
