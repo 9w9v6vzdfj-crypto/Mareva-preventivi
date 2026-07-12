@@ -28,9 +28,10 @@
      sandbox dal dashboard Stripe). ⚠️ Le chiavi segrete NON vanno mai
      condivise in chat: si incollano solo lì.
   3. ⬜ **Stripe (sandbox) → Prodotti**: crea "Facile Preventivo" con due
-     prezzi ricorrenti (mensile e annuale). Copia i due **price ID**
-     (`price_…`, non sono segreti) e passali a Claude: verranno inseriti in
-     `STRIPE_PREZZI` e il paywall si accende.
+     prezzi ricorrenti — **2,99 €/mese** e **29,99 €/anno** (cifre decise:
+     devono combaciare con quelle mostrate nel paywall dell'app). Copia i
+     due **price ID** (`price_…`, non sono segreti) e passali a Claude:
+     verranno inseriti in `STRIPE_PREZZI` e il paywall si accende.
   4. ⬜ **Ri-pubblica `firestore.rules`** (aggiornate con le collezioni
      dell'estensione: customers/checkout_sessions/subscriptions/products).
   5. ⬜ Test in sandbox con carta di prova `4242 4242 4242 4242`, poi
