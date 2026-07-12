@@ -232,5 +232,26 @@ try {
     `passi=${tuttiPassi.length} targetsOk=${targetsOk} mockOk=${mockOk} vista=${vista}`);
 } catch (e) { check('Guide: passi validi (3 tour), mockup e ciclo di vita', false, e.message); }
 
+// 11) Abbonamento: gating spento di default (prezzi vuoti), limite e stato
+//     abbonato quando acceso, contatore che cresce e non si azzera.
+try {
+  const sb = loadApp({});
+  boot(sb);
+  const r1 = vm.runInContext('Abbo.gatingAttivo()===false && Abbo.puoCreare()===true', sb);
+  vm.runInContext(`
+    STRIPE_PREZZI.mensile='price_test';
+    localStorage.setItem('mv_stat', JSON.stringify({prevCreati:5}));
+  `, sb);
+  const r2 = vm.runInContext('Abbo.gatingAttivo()===true && Abbo.puoCreare()===false && Abbo.rimasti()===0', sb);
+  vm.runInContext(`localStorage.setItem('mv_abbo', JSON.stringify({attivo:true, fine: Date.now()+86400000}));`, sb);
+  const r3 = vm.runInContext('Abbo.attivo()===true && Abbo.puoCreare()===true', sb);
+  vm.runInContext(`localStorage.setItem('mv_abbo', JSON.stringify({attivo:true, fine: Date.now()-1000}));`, sb);
+  const r4 = vm.runInContext('Abbo.attivo()===false && Abbo.puoCreare()===false', sb);
+  vm.runInContext('Abbo.registraCreazione()', sb);
+  const r5 = vm.runInContext('Abbo.usati()===6', sb);
+  check('Abbonamento: gating, limite, stato e contatore', r1 && r2 && r3 && r4 && r5,
+    `r1=${r1} r2=${r2} r3=${r3} r4=${r4} r5=${r5}`);
+} catch (e) { check('Abbonamento: gating, limite, stato e contatore', false, e.message); }
+
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);

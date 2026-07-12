@@ -398,3 +398,20 @@ input,select,textarea{-webkit-appearance:none}
   line-height:1.5;
 }
 .auth-legal a{color:var(--accent);font-weight:600}
+
+/* ── ABBONAMENTO: paywall ── */
+.abbo-box{
+  background:#fff;border-radius:16px;
+  max-width:400px;margin:8vh auto 0;
+  padding:24px 20px 16px;text-align:center;
+  box-shadow:0 12px 40px rgba(0,0,0,.3);
+}
+.abbo-icona{font-size:40px;margin-bottom:8px}
+.abbo-titolo{font-size:19px;font-weight:800;color:var(--text);margin-bottom:10px}
+.abbo-testo{font-size:13.5px;color:var(--sub);line-height:1.55;margin-bottom:12px;text-align:left}
+.abbo-btns{display:flex;flex-direction:column;gap:8px;margin:14px 0 4px}
+.abbo-nonora{
+  background:none;border:none;cursor:pointer;
+  font-size:13px;font-weight:600;color:var(--sub);
+  padding:10px;width:100%;
+}

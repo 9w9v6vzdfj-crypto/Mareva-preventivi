@@ -5,5 +5,26 @@ service cloud.firestore {
     match /users/{uid}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
+
+    // ── Estensione Stripe "Run Payments with Stripe" ──
+    // L'utente legge il proprio profilo cliente/abbonamenti/pagamenti e puo'
+    // creare sessioni di checkout; a scrivere lo stato pensa l'estensione.
+    match /customers/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      match /checkout_sessions/{id} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+      match /subscriptions/{id} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+      }
+      match /payments/{id} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+    // Prodotti e prezzi sincronizzati dall'estensione: lettura pubblica.
+    match /products/{id} {
+      allow read: if true;
+      match /prices/{priceId} { allow read: if true; }
+    }
   }
 }
