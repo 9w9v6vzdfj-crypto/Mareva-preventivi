@@ -33,7 +33,9 @@
      due **price ID** (`price_…`, non sono segreti) e passali a Claude:
      verranno inseriti in `STRIPE_PREZZI` e il paywall si accende.
   4. ⬜ **Ri-pubblica `firestore.rules`** (aggiornate con le collezioni
-     dell'estensione: customers/checkout_sessions/subscriptions/products).
+     dell'estensione E con il requisito email verificata). Nota: fallo DOPO
+     aver confermato la tua email nell'app, altrimenti la sync del tuo
+     account resta bloccata finché non la confermi.
   5. ⬜ Test in sandbox con carta di prova `4242 4242 4242 4242`, poi
      passaggio alle chiavi live per incassare davvero.
 - **Legale (GDPR)** — ✅ bozze pubblicate: `privacy.html` e `termini.html`,

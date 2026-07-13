@@ -19,7 +19,7 @@ let _justCreated = false;
 function _authEl(id){ return document.getElementById(id); }
 function _authBusy(on){
   const b=_authEl('authBusy'); if(b) b.style.display = on ? 'block' : 'none';
-  ['btnAccedi','btnCrea','btnGoogle'].forEach(i=>{ const el=_authEl(i); if(el) el.disabled = on; });
+  ['btnAccedi','btnCrea','btnGoogle','btnVerOk','btnVerResend'].forEach(i=>{ const el=_authEl(i); if(el) el.disabled = on; });
 }
 function _authMsg(t, ok){
   const e=_authEl('authError'); if(!e) return;
@@ -28,6 +28,42 @@ function _authMsg(t, ok){
 }
 function mostraGate(){ const g=_authEl('authGate'); if(g) g.style.display='flex'; }
 function mostraApp(){ const g=_authEl('authGate'); if(g) g.style.display='none'; }
+// Cancello in modalità "conferma email": account creato ma link non cliccato.
+function mostraVerifica(email){
+  mostraGate();
+  const f=_authEl('authForm');     if(f) f.style.display='none';
+  const v=_authEl('authVerifica'); if(v) v.style.display='block';
+  const t=_authEl('verificaEmail');if(t) t.textContent=email||'';
+  _authBusy(false);
+}
+function mostraFormAccesso(){
+  const f=_authEl('authForm');     if(f) f.style.display='';
+  const v=_authEl('authVerifica'); if(v) v.style.display='none';
+}
+// L'utente ha cliccato il link? Ricontrolla lo stato sul server.
+function verificaControlla(){
+  if(typeof firebase==='undefined' || !firebase.auth) return;
+  const u=firebase.auth().currentUser; if(!u) return;
+  _authMsg(''); _authBusy(true);
+  u.reload().then(function(){
+    _authBusy(false);
+    const u2=firebase.auth().currentUser;
+    if(u2 && u2.emailVerified){ location.reload(); }
+    else _authMsg('Email non ancora confermata: apri il link che ti abbiamo inviato (guarda anche nello spam).');
+  }).catch(function(){ _authBusy(false); _authMsg('Controllo non riuscito: verifica la connessione e riprova.'); });
+}
+function verificaReinvia(){
+  if(typeof firebase==='undefined' || !firebase.auth) return;
+  const u=firebase.auth().currentUser; if(!u) return;
+  _authMsg(''); _authBusy(true);
+  u.sendEmailVerification().then(function(){
+    _authBusy(false);
+    _authMsg('📧 Email inviata di nuovo a '+(u.email||'')+'.', true);
+  }).catch(function(e){
+    _authBusy(false);
+    _authMsg(e && e.code==='auth/too-many-requests' ? 'Hai richiesto troppe email: aspetta qualche minuto e riprova.' : 'Invio non riuscito, riprova tra poco.');
+  });
+}
 
 function _authErrore(err){
   _authBusy(false);
@@ -60,7 +96,12 @@ function creaAccount(){
   if(pw.length<6){ _authMsg('La password deve avere almeno 6 caratteri.'); return; }
   _authMsg(''); _authBusy(true);
   firebase.auth().createUserWithEmailAndPassword(email, pw)
-    .then(function(){ _justCreated = true; })
+    .then(function(cred){
+      _justCreated = true;
+      // Verifica email obbligatoria: senza il link confermato l'app non si apre
+      // (evita email inventate e account usa-e-getta per aggirare il piano gratuito)
+      try{ if(cred && cred.user) cred.user.sendEmailVerification(); }catch(e){}
+    })
     .catch(_authErrore);
 }
 function accedi(){
@@ -168,6 +209,13 @@ function preparaDatiPerUtente(uid){
   firebase.auth().onAuthStateChanged(function(user){
     currentUser = user;
     _authBusy(false);
+    // Account email/password non ancora verificato → schermata di conferma,
+    // niente app e niente sincronizzazione finché il link non è cliccato.
+    if(user && !user.emailVerified &&
+       (user.providerData||[]).some(function(p){ return p && p.providerId==='password'; })){
+      mostraVerifica(user.email);
+      return;
+    }
     if(user){
       const ae=_authEl('accountEmail');
       if(ae) ae.textContent = user.email || ((user.providerData[0]||{}).email) || 'account Google';
@@ -184,6 +232,7 @@ function preparaDatiPerUtente(uid){
       avviaGuidaPrimoUso();
     }else{
       Sync.spegni();
+      mostraFormAccesso();
       mostraGate();
     }
   });
@@ -2809,7 +2858,14 @@ const Abbo = {
   _softMostrato:false,
 
   gatingAttivo(){ return !!(STRIPE_PREZZI.mensile || STRIPE_PREZZI.annuale); },
-  usati(){ return (Store._read('mv_stat',{prevCreati:0}).prevCreati)||0; },
+  // Conteggio doppio: per ACCOUNT (mv_stat, sincronizzato col cloud) e per
+  // DISPOSITIVO (mv_stat_dev, che sopravvive al cambio account): creare un
+  // secondo account sullo stesso telefono non azzera i preventivi gratuiti.
+  usati(){
+    const acc=(Store._read('mv_stat',{prevCreati:0}).prevCreati)||0;
+    const dev=(Store._read('mv_stat_dev',{prevCreati:0}).prevCreati)||0;
+    return Math.max(acc, dev);
+  },
   rimasti(){ return Math.max(0, LIMITE_PREV_GRATIS - this.usati()); },
   attivo(){
     const s=Store._read('mv_abbo',{attivo:false,fine:0});
@@ -2824,6 +2880,9 @@ const Abbo = {
     const st=Store._read('mv_stat',{prevCreati:0});
     st.prevCreati=(st.prevCreati||0)+1;
     Store._write('mv_stat', st);
+    const sd=Store._read('mv_stat_dev',{prevCreati:0});
+    sd.prevCreati=(sd.prevCreati||0)+1;
+    Store._write('mv_stat_dev', sd);
     this.aggiornaCard();
   },
 
