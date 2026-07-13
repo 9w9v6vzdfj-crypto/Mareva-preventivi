@@ -253,5 +253,29 @@ try {
     `r1=${r1} r2=${r2} r3=${r3} r4=${r4} r5=${r5}`);
 } catch (e) { check('Abbonamento: gating, limite, stato e contatore', false, e.message); }
 
+// 12) Isolamento account: un nuovo account NON eredita i dati locali del
+//     precedente; al ritorno del primo account i suoi dati tornano.
+try {
+  const seed = {
+    mv_uid: 'utenteA',
+    mv_prev: JSON.stringify([{ id: 1, numero: 'P-1', cliente: { nome: 'DiUtenteA' }, locali: [] }]),
+    mv_impresa: JSON.stringify({ nome: 'Impresa A' }),
+  };
+  const sb = loadApp(seed);
+  boot(sb);
+  const primaN = vm.runInContext('preventivi.length', sb);
+  vm.runInContext('preparaDatiPerUtente("utenteB")', sb);
+  const dopoSwitch = JSON.parse(vm.runInContext(
+    `JSON.stringify({n:preventivi.length, imp:impresa.nome||'', uid:localStorage.getItem('mv_uid'), stash:!!localStorage.getItem('mv_saved_utenteA')})`, sb));
+  vm.runInContext('preparaDatiPerUtente("utenteA")', sb);
+  const ritorno = JSON.parse(vm.runInContext(
+    `JSON.stringify({n:preventivi.length, nome:(preventivi[0]||{}).cliente ? preventivi[0].cliente.nome : '', stashB:!!localStorage.getItem('mv_saved_utenteB'), stashA:!!localStorage.getItem('mv_saved_utenteA')})`, sb));
+  const ok = primaN === 1
+    && dopoSwitch.n === 0 && dopoSwitch.imp === '' && dopoSwitch.uid === 'utenteB' && dopoSwitch.stash === true
+    && ritorno.n === 1 && ritorno.nome === 'DiUtenteA' && ritorno.stashB === true && ritorno.stashA === false;
+  check('Isolamento account: switch pulito e ripristino al ritorno', ok,
+    `prima=${primaN} dopo=${JSON.stringify(dopoSwitch)} ritorno=${JSON.stringify(ritorno)}`);
+} catch (e) { check('Isolamento account: switch pulito e ripristino al ritorno', false, e.message); }
+
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);

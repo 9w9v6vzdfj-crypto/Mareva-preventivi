@@ -106,6 +106,58 @@ document.addEventListener('click', function(){
   if(m && m.style.display==='block') m.style.display='none';
 });
 
+// ══════════════════════════════════════════════════════════
+//  ISOLAMENTO DATI PER ACCOUNT (stesso dispositivo)
+//  I dati locali appartengono a UN account (mv_uid). Se accede un account
+//  diverso, i dati del precedente vengono messi da parte sul dispositivo
+//  (mv_saved_<uid>, NIENTE viene perso) e ripristinati al suo ritorno;
+//  il nuovo account parte pulito e carica il SUO cloud. Senza questo, un
+//  nuovo account "ereditava" i preventivi locali dell'account precedente
+//  e la sync li copiava pure sul suo cloud.
+// ══════════════════════════════════════════════════════════
+function preparaDatiPerUtente(uid){
+  if(typeof localStorage==='undefined' || !uid) return;
+  const attuale = localStorage.getItem('mv_uid') || '';
+  if(attuale === uid) return;
+  const KEYS_DATI = ['mv_prev','mv_sop','mv_impresa','mv_mestiere','mv_lavori_custom','mv_del','mv_mod','mv_stat','mv_abbo'];
+  if(attuale){
+    // metti da parte i dati dell'account precedente (restano sul dispositivo)
+    const stash={};
+    KEYS_DATI.forEach(k=>{ const v=localStorage.getItem(k); if(v!=null) stash[k]=v; });
+    try{ localStorage.setItem('mv_saved_'+attuale, JSON.stringify(stash)); }catch(e){}
+    KEYS_DATI.forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} });
+  }
+  // (se attuale era vuoto: primo login su questo dispositivo → i dati locali
+  //  creati senza account vengono adottati da questo account, come sempre)
+
+  // ripristina eventuali dati messi da parte per QUESTO account
+  const salvatiRaw = localStorage.getItem('mv_saved_'+uid);
+  if(salvatiRaw){
+    try{
+      const salvati=JSON.parse(salvatiRaw);
+      Object.keys(salvati).forEach(k=>{ try{ localStorage.setItem(k, salvati[k]); }catch(e){} });
+    }catch(e){}
+    try{ localStorage.removeItem('mv_saved_'+uid); }catch(e){}
+  }
+  try{ localStorage.setItem('mv_uid', uid); }catch(e){}
+
+  // ricarica lo stato in memoria dai dati (eventualmente nuovi) e azzera i
+  // form: potevano contenere bozze dell'altro account
+  preventivi   = Store.loadPreventivi();
+  sopralluoghi = Store.loadSopralluoghi();
+  impresa      = Store.loadImpresa();
+  mestiere     = Store.getMestiere();
+  lavoriCustom = Store.loadLavoriCustom();
+  resetForm(true);
+  sResetForm(true);
+  applyMestiereUI();
+  aggStats();
+  caricaImpresa();
+  Abbo.aggiornaCard();
+  const pl=document.getElementById('page-lista');
+  if(pl && pl.classList.contains('active')) renderLista();
+}
+
 (function initAuth(){
   if(typeof firebase==='undefined' || !firebase.auth){
     mostraApp(); // Firebase non disponibile → app in modalità locale (come prima)
@@ -124,6 +176,9 @@ document.addEventListener('click', function(){
         _justCreated = false;
         setTimeout(function(){ alert('✅ Account creato con successo!\nBenvenuto in Facile Preventivo.'); }, 300);
       }
+      // Isolamento per account: se e' entrato un account diverso, i dati
+      // locali del precedente vengono messi da parte PRIMA di sincronizzare.
+      preparaDatiPerUtente(user.uid);
       // Fase 3: dati dell'account sul cloud (se le regole Firestore sono pubblicate)
       Sync.avvia();
       avviaGuidaPrimoUso();

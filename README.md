@@ -53,7 +53,10 @@ cloud** (Firestore, `users/{uid}/app/dati`) come specchio per-utente: fusione
 per id senza perdite, eliminazioni ricordate con tombstone, migrazione
 automatica dei dati locali al primo login. La sync richiede le regole di
 `firestore.rules` pubblicate (vedi `DA-FARE.md`); finché non lo sono, l'app
-resta locale e lo stato è visibile nel menu account. Backup manuale:
+resta locale e lo stato è visibile nel menu account. I dati locali sono
+**isolati per account** (`mv_uid`): se sullo stesso dispositivo accede un
+account diverso, i dati del precedente vengono messi da parte
+(`mv_saved_<uid>`) e ripristinati al suo ritorno. Backup manuale:
 esporta/ripristina JSON dalla pagina Impostazioni.
 
 ## Test
