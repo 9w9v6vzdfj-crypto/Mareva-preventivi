@@ -2852,7 +2852,7 @@ const STRIPE_PREZZI = {
   mensile: '',  // price_...  (da Stripe → Prodotti → Facile Preventivo)
   annuale: ''   // price_...
 };
-const LIMITE_PREV_GRATIS = 5;
+const LIMITE_PREV_GRATIS = 3;
 
 const Abbo = {
   _softMostrato:false,
