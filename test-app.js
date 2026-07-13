@@ -249,9 +249,14 @@ try {
   const r4 = vm.runInContext('Abbo.attivo()===false && Abbo.puoCreare()===false', sb);
   vm.runInContext('Abbo.registraCreazione()', sb);
   const r5 = vm.runInContext('Abbo.usati()===6', sb);
-  check('Abbonamento: gating, limite, stato e contatore', r1 && r2 && r3 && r4 && r5,
-    `r1=${r1} r2=${r2} r3=${r3} r4=${r4} r5=${r5}`);
-} catch (e) { check('Abbonamento: gating, limite, stato e contatore', false, e.message); }
+  // contatore per DISPOSITIVO: azzerare quello dell'account non basta
+  vm.runInContext(`localStorage.setItem('mv_stat', JSON.stringify({prevCreati:0})); localStorage.setItem('mv_abbo','{}');`, sb);
+  const r6 = vm.runInContext('Abbo.usati()===1 && Abbo.puoCreare()===true', sb);
+  vm.runInContext(`localStorage.setItem('mv_stat_dev', JSON.stringify({prevCreati:5}));`, sb);
+  const r7 = vm.runInContext('Abbo.usati()===5 && Abbo.puoCreare()===false', sb);
+  check('Abbonamento: gating, limite, stato e contatore (account+dispositivo)', r1 && r2 && r3 && r4 && r5 && r6 && r7,
+    `r1=${r1} r2=${r2} r3=${r3} r4=${r4} r5=${r5} r6=${r6} r7=${r7}`);
+} catch (e) { check('Abbonamento: gating, limite, stato e contatore (account+dispositivo)', false, e.message); }
 
 // 12) Isolamento account: un nuovo account NON eredita i dati locali del
 //     precedente; al ritorno del primo account i suoi dati tornano.
@@ -260,18 +265,20 @@ try {
     mv_uid: 'utenteA',
     mv_prev: JSON.stringify([{ id: 1, numero: 'P-1', cliente: { nome: 'DiUtenteA' }, locali: [] }]),
     mv_impresa: JSON.stringify({ nome: 'Impresa A' }),
+    mv_stat_dev: JSON.stringify({ prevCreati: 5 }), // contatore del DISPOSITIVO
   };
   const sb = loadApp(seed);
   boot(sb);
   const primaN = vm.runInContext('preventivi.length', sb);
   vm.runInContext('preparaDatiPerUtente("utenteB")', sb);
   const dopoSwitch = JSON.parse(vm.runInContext(
-    `JSON.stringify({n:preventivi.length, imp:impresa.nome||'', uid:localStorage.getItem('mv_uid'), stash:!!localStorage.getItem('mv_saved_utenteA')})`, sb));
+    `JSON.stringify({n:preventivi.length, imp:impresa.nome||'', uid:localStorage.getItem('mv_uid'), stash:!!localStorage.getItem('mv_saved_utenteA'), usati:Abbo.usati()})`, sb));
   vm.runInContext('preparaDatiPerUtente("utenteA")', sb);
   const ritorno = JSON.parse(vm.runInContext(
     `JSON.stringify({n:preventivi.length, nome:(preventivi[0]||{}).cliente ? preventivi[0].cliente.nome : '', stashB:!!localStorage.getItem('mv_saved_utenteB'), stashA:!!localStorage.getItem('mv_saved_utenteA')})`, sb));
   const ok = primaN === 1
     && dopoSwitch.n === 0 && dopoSwitch.imp === '' && dopoSwitch.uid === 'utenteB' && dopoSwitch.stash === true
+    && dopoSwitch.usati === 5 // il contatore del dispositivo sopravvive al cambio account
     && ritorno.n === 1 && ritorno.nome === 'DiUtenteA' && ritorno.stashB === true && ritorno.stashA === false;
   check('Isolamento account: switch pulito e ripristino al ritorno', ok,
     `prima=${primaN} dopo=${JSON.stringify(dopoSwitch)} ritorno=${JSON.stringify(ritorno)}`);

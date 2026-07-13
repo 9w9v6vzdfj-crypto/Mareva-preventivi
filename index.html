@@ -20,23 +20,39 @@
     <div class="auth-brand">Facile<span>Preventivo</span></div>
     <div class="auth-sub">Accedi o crea il tuo account</div>
 
-    <div class="field"><label class="label">Email</label>
-      <input class="input" id="authEmail" type="email" autocomplete="email" inputmode="email" placeholder="tua@email.it"></div>
-    <div class="field"><label class="label">Password</label>
-      <input class="input" id="authPw" type="password" autocomplete="current-password" placeholder="almeno 6 caratteri"></div>
+    <div id="authForm">
+      <div class="field"><label class="label">Email</label>
+        <input class="input" id="authEmail" type="email" autocomplete="email" inputmode="email" placeholder="tua@email.it"></div>
+      <div class="field"><label class="label">Password</label>
+        <input class="input" id="authPw" type="password" autocomplete="current-password" placeholder="almeno 6 caratteri"></div>
 
-    <button class="auth-link" onclick="recuperaPassword()">Password dimenticata?</button>
+      <button class="auth-link" onclick="recuperaPassword()">Password dimenticata?</button>
+
+      <button class="btn btn-primary btn-full" id="btnAccedi" onclick="accedi()">Accedi</button>
+      <button class="btn btn-secondary btn-full" id="btnCrea" onclick="creaAccount()" style="margin-top:8px">Crea un nuovo account</button>
+
+      <!-- Login Google rimosso per scelta: per riattivarlo servono (1) provider
+           Google abilitato in Firebase Console, (2) dominio del sito tra gli
+           Authorized domains, (3) ripristinare qui il bottone:
+           <div class="auth-or">oppure</div>
+           <button class="btn btn-secondary btn-full" id="btnGoogle" onclick="accediGoogle()">Accedi con Google</button> -->
+    </div>
+
+    <!-- Verifica email: registrazione fatta ma link non ancora confermato -->
+    <div id="authVerifica" style="display:none">
+      <div style="font-size:40px;text-align:center;margin:6px 0 10px">📬</div>
+      <div style="font-size:15px;font-weight:800;text-align:center;margin-bottom:8px">Conferma la tua email</div>
+      <p style="font-size:13.5px;color:var(--sub);line-height:1.55;text-align:center;margin-bottom:14px">
+        Ti abbiamo inviato un link a<br><strong id="verificaEmail" style="color:var(--text)">—</strong><br>
+        Aprilo per attivare l'account, poi torna qui.<br>
+        <span style="font-size:12px">(Controlla anche la cartella spam)</span>
+      </p>
+      <button class="btn btn-primary btn-full" id="btnVerOk" onclick="verificaControlla()">Ho confermato ✓</button>
+      <button class="btn btn-secondary btn-full" id="btnVerResend" onclick="verificaReinvia()" style="margin-top:8px">Invia di nuovo l'email</button>
+      <button class="auth-link" onclick="esci()" style="margin:10px auto 0;display:block">Usa un altro account</button>
+    </div>
 
     <div id="authError" class="auth-error"></div>
-
-    <button class="btn btn-primary btn-full" id="btnAccedi" onclick="accedi()">Accedi</button>
-    <button class="btn btn-secondary btn-full" id="btnCrea" onclick="creaAccount()" style="margin-top:8px">Crea un nuovo account</button>
-
-    <!-- Login Google rimosso per scelta: per riattivarlo servono (1) provider
-         Google abilitato in Firebase Console, (2) dominio del sito tra gli
-         Authorized domains, (3) ripristinare qui il bottone:
-         <div class="auth-or">oppure</div>
-         <button class="btn btn-secondary btn-full" id="btnGoogle" onclick="accediGoogle()">Accedi con Google</button> -->
 
     <div class="auth-busy" id="authBusy" style="display:none">Attendere…</div>
 
