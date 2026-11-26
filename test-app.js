@@ -131,7 +131,7 @@ try {
   evil.locali[1].man[0].nome = '<i onmouseover=1>';
   const pdf = sb.buildPdfPrev(evil);
   const item = sb.prevItemHTML(evil, false);
-  run(sb, 'doc=normalizzaDoc(' + JSON.stringify(evil) + '); wzStep=1; wzRender(); wzStep=4; wzRender();');
+  run(sb, 'doc=normalizzaDoc(' + JSON.stringify(evil) + '); wzStep=1; wzRender(); wzStep=2; wzRender(); wzStep=3; wzRender();');
   const scr = run(sb, 'wzSchermata()');
   const bad = s => s.includes('"><img') || s.includes('<script>') || s.includes('</td><b>') || s.includes('<i onmouseover');
   check('Escape HTML: PDF, archivio ed editor', !bad(pdf) && !bad(item) && !bad(scr), 'markup non escapato');
@@ -148,7 +148,7 @@ try {
   const salvati = JSON.parse(seed.mv_prev);
   const listino = JSON.parse(seed.mv_listino);
   const nuovo = run(sb, 'wzNuovo(); doc.prezzi.tp');
-  const riapre = run(sb, `wzApri(${salvati[0].id}) && doc.cliente.nome==='Anna' && wzStep===4`);
+  const riapre = run(sb, `wzApri(${salvati[0].id}) && doc.cliente.nome==='Anna' && wzStep===3`);
   const ok = senzaNome === false && salvati.length === 1 && salvati[0].v === 2 && near(salvati[0].totale, 37.8 * 9 * 1.22)
     && listino.tp === 9 && nuovo === 9 && riapre === true;
   check('Editor: salvataggio, listino prezzi e riapertura', ok, JSON.stringify({ senzaNome, n: salvati.length, tot: salvati[0] && salvati[0].totale, listino, nuovo, riapre }));
@@ -295,6 +295,24 @@ try {
   check('Pianta: stanze→locali, porte, messa in scala e PDF', collegati && nonPrezzata && scalaOk && near(pareti, 46.92) && pdfOk && svgMis.includes('data-room="1"'),
     JSON.stringify({ r1, nonPrezzata, esito, st, pareti, pdfOk }));
 } catch (e) { check('Pianta: stanze→locali, porte, messa in scala e PDF', false, e.message); }
+
+// 14) Lavori "in tutti i locali": una spunta vale per ogni stanza, le eccezioni
+//     restano per locale, i locali aggiunti dopo li ricevono; listino col segno _ok.
+try {
+  const sb = loadApp({ mv_listino: JSON.stringify({ tp: 8, _ok: 1 }) });
+  boot(sb);
+  run(sb, `doc.cliente.nome='Test'; doc.via='manuale'; wzStep=1;
+    wzAddLocale('Soggiorno'); wzAddLocale('Bagno');
+    doc.locali.forEach(l=>{ l.L=4; l.W=3; });
+    wzStep=2; wzRender();
+    wzChange({target:{dataset:{tutti:'tp'}, checked:true}});
+    doc.locali[1].lav.tp=false;           // eccezione: niente tinteggiatura nel bagno
+    wzAddLocale('Camera');`);
+  const r = JSON.parse(run(sb, `JSON.stringify({lav:doc.locali.map(l=>!!l.lav.tp), prezzo:doc.prezzi.tp, ok:'_ok' in doc.prezzi, diff:wzDiff(doc.locali[1]), passi:passiLbl().length})`));
+  const ok = r.lav.join() === 'true,false,true' && r.prezzo === 8 && r.ok === false
+    && r.diff.includes('senza tinteggiatura pareti') && r.passi === 3;
+  check('Lavori in tutti i locali, eccezioni, listino', ok, JSON.stringify(r));
+} catch (e) { check('Lavori in tutti i locali, eccezioni, listino', false, e.message); }
 
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);

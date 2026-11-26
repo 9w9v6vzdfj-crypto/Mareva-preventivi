@@ -73,7 +73,7 @@ const Pianta=(function(){
     regions.forEach(r=>{
       if(r.data && locDi(r.data.locId)){ usati.add(r.data.locId); return; }
       const id=docRef.locali.length ? Math.max(...docRef.locali.map(l=>l.id))+1 : 1;
-      const l=nuovoLocale(id,''); l.daPianta=true;
+      const l=conLavoriComuni(nuovoLocale(id,''), docRef); l.daPianta=true;
       docRef.locali.push(l);
       const d={anchor:{gx:r.lc.gx, gy:r.lc.gy}, locId:id};
       roomsData=roomsData.filter(x=>!(x.anchor.gx===d.anchor.gx && x.anchor.gy===d.anchor.gy));
@@ -145,6 +145,7 @@ const Pianta=(function(){
   }
   function ripristina(str){
     const s=JSON.parse(str);
+    chiudiNomi();
     walls=s.walls; roomsData=s.roomsData; inScala=!!s.inScala; infissi=s.infissi||[]; avvisi=[];
     if(docRef) (s.locs||[]).forEach(x=>{
       let l=locDi(x.id);
@@ -981,6 +982,7 @@ const Pianta=(function(){
     if(!modal.hidden || !helpModal.hidden) return;
     chiudiMenu();
     if(!pop.hidden){ chiudiPop(); return; }   // il primo tocco chiude solo il menu del muro
+    chiudiNomi();
     try{ cv.setPointerCapture(e.pointerId); }catch(_){}
     const p=sp(e);
     ptrs.set(e.pointerId, p);
@@ -1063,7 +1065,11 @@ const Pianta=(function(){
         aggiorna();
         if(nuoveIds.size){
           flash={ids:nuoveIds, t0:performance.now()};
-          toast(nuoveIds.size===1 ? 'Stanza chiusa · toccala per le misure' : nuoveIds.size+' stanze chiuse · toccale per le misure');
+          // il nome si chiede solo per le stanze che non ce l'hanno (dividendo una
+          // stanza, la parte che resta mantiene il suo)
+          const senzaNome=[...nuoveIds].filter(i=>!(regions[i].data && regions[i].data.name));
+          if(senzaNome.length===1) chiediNome(senzaNome[0]);
+          else if(senzaNome.length>1) toast(senzaNome.length+' stanze nuove · toccale per nome e misure');
         }
       }
       requestDraw();
@@ -1120,6 +1126,28 @@ const Pianta=(function(){
     pop.style.left=Math.max(12, Math.min(W-r.width-12, p.x-r.width/2))+'px';
     pop.style.top=(p.y-r.height-18>70 ? p.y-r.height-18 : Math.min(H-r.height-12, p.y+18))+'px';
   }
+  /* ── appena una stanza si chiude: "Che stanza è?" con i nomi da toccare ── */
+  const nameBar=$('nameBar'); let nomeRi=-1;
+  $('nameChips').innerHTML=NOMI.slice(0,8).map(n=>`<button type="button" class="pz-chip" data-nome="${n}">${n}</button>`).join('')+
+    '<button type="button" class="pz-chip" data-nome="">Altro…</button>';
+  function chiediNome(ri){
+    nomeRi=ri; nameBar.hidden=false;
+    nameBar.style.bottom=(window.innerHeight-drawer.getBoundingClientRect().top+8)+'px';
+  }
+  function chiudiNomi(){ if(nameBar && !nameBar.hidden){ nameBar.hidden=true; nomeRi=-1; } }
+  $('nameChips').addEventListener('click', e=>{
+    const b=e.target.closest('[data-nome]'); if(!b) return;
+    const ri=nomeRi; chiudiNomi();
+    if(!regions[ri]) return;
+    if(!b.dataset.nome){ apriModal(ri); return; }
+    collegaLocali();
+    const l=regions[ri].data && locDi(regions[ri].data.locId); if(!l) return;
+    snapshot();
+    const base=b.dataset.nome, uguali=docRef.locali.filter(x=>x!==l && (x.nome===base || x.nome.startsWith(base+' '))).length;
+    l.nome= uguali ? base+' '+(uguali+1) : base;
+    aggiorna();
+    toast(l.nome+' · toccala per le misure');
+  });
   function chiudiPop(){ if(pop.hidden) return; pop.hidden=true; selWall=-1; requestDraw(); }
   pop.addEventListener('click', e=>{
     const b=e.target.closest('[data-p]'); if(!b) return;
@@ -1400,6 +1428,7 @@ const Pianta=(function(){
   }
   function chiudi(){
     if(!aperto) return;
+    chiudiNomi();
     if(!modal.hidden) chiudiModal();
     if(!infModal.hidden) chiudiInfisso();
     if(vista3D()) chiudi3D();

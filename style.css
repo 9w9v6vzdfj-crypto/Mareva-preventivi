@@ -767,3 +767,22 @@ select.wz-mini{width:auto;text-align:left}
 @media (prefers-reduced-motion: reduce){ *{transition:none!important;animation:none!important} }
 #piantaOv .pz-titolo{box-shadow:none;background:none;border:none;color:var(--muted);font-weight:600}
 #piantaOv .pz-back{cursor:pointer;color:var(--accent)}
+/* ── flusso a 3 passi ── */
+.wz-back{flex:0 0 auto;padding:12px 10px;border-radius:12px;border:1px solid var(--border);background:var(--white);color:var(--text);font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap}
+.wz-cta{gap:8px}
+.wz-cta-info b{font-size:15px}
+.wz-chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.wz-loc{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.wz-loc-n{font-weight:700}
+.wz-loc-m{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:6px;align-items:end}
+.wz-loc-m label{display:flex;flex-direction:column;gap:3px;min-width:0}
+.wz-loc-m label span{font-size:11px;color:var(--sub);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.wz-loc-m .wz-input{padding:9px 10px}
+.wz-loc-mq{min-width:64px;text-align:right;font-size:14px;font-variant-numeric:tabular-nums;padding-bottom:10px}
+.wz-com{font-style:normal;font-size:10.5px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.3px;margin-left:4px}
+.wz-lst{cursor:default}
+.wz-row .d .wz-pill{font-size:11px;padding:3px 7px}
+#piantaOv .pz-namebar{position:fixed;z-index:24;left:max(16px, env(safe-area-inset-left, 0px));right:max(16px, env(safe-area-inset-right, 0px));
+  background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+#piantaOv .pz-namebar > span{font:700 14px/1.2 var(--f-display)}
+@media (min-width:820px){ #piantaOv .pz-namebar{left:auto;width:360px} }
