@@ -683,18 +683,22 @@ function inviaPDF(){
     foglio.style.cssText='-webkit-text-size-adjust:100%;text-size-adjust:100%;padding:0 6px;background:#fff;color:#111827;font-family:-apple-system,Arial,sans-serif;font-size:12px;line-height:1.45';
     foglio.innerHTML=document.getElementById('pdfModalContent').innerHTML;
     box.appendChild(foglio); document.body.appendChild(box);
+    const yPrima=window.scrollY||0; try{ window.scrollTo(0,0); }catch(e){}
+    const rimetti=()=>{ try{ window.scrollTo(0,yPrima); }catch(e){} };
     return html2pdf().set({
       margin:[12,12,14,12], filename:nome,
       image:{type:'jpeg', quality:0.95},
-      html2canvas:{scale:2, backgroundColor:'#ffffff'},
+      // scrollX/scrollY a 0: con la pagina scorsa, la "foto" partiva più in basso
+      // (fascia bianca in cima e fondo del preventivo tagliato)
+      html2canvas:{scale:2, backgroundColor:'#ffffff', scrollX:0, scrollY:0},
       jsPDF:{unit:'mm', format:'a4', orientation:'portrait'},
       pagebreak:{mode:['css','legacy'], avoid:['tr','.no-break','.firme']}
     }).from(foglio).outputPdf('blob').then(blob=>{
-      box.remove();
+      box.remove(); rimetti();
       _pdfPronto=new File([blob], nome, {type:'application/pdf'});
       fine('📤 Condividi');
       return _condividiPdf().catch(()=>{ /* serve un altro tocco: il bottone ora dice "Condividi" */ });
-    }, e=>{ box.remove(); throw e; });
+    }, e=>{ box.remove(); rimetti(); throw e; });
   }).catch(()=>{
     fine('📤 Invia');
     alert('Per creare il PDF da inviare serve internet.\nIn alternativa: Stampa → Salva come PDF.');

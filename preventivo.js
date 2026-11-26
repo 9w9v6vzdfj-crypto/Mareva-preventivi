@@ -183,7 +183,7 @@ function svgPianta(d, fase){
   const pxW=600, pxH=Math.max(60, Math.round(pxW*vbA[3]/vbA[2]));
   const sw=S/170, fs0=S/24;
   const locs=new Map((d.locali||[]).map(l=>[l.id,l]));
-  let out=`<svg viewBox="${vb}" width="${pxW}" height="${pxH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pianta dei locali" style="display:block;width:100%;height:auto;max-height:${pdf?'none':'320px'}">`;
+  let out=`<svg viewBox="${vb}" width="${pxW}" height="${pxH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pianta dei locali" style="display:block;width:100%;height:auto;max-height:${pdf?'260px':'320px'}">`;
   (a.stanze||[]).forEach(st=>{
     const l=locs.get(st.locId);
     const s=l?locSup(l):null;
@@ -260,7 +260,7 @@ function buildPdfPrev(d){
     ${indir?`<div style="font-size:11.5px;color:#374151">${indir}</div>`:''}
   </div>
   ${haPianta(d)?`<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#6B7280;margin:14px 0 6px">Pianta dei locali${d.pianta.inScala?'':' (schizzo non in scala)'}</div>
-  <div class="no-break" style="border:1px solid #E5E7EB;border-radius:6px;padding:10px;max-width:520px;margin:0 auto">${svgPianta(d,'pdf')}</div>`:''}
+  <div class="no-break" style="border:1px solid #E5E7EB;border-radius:6px;padding:8px;max-width:440px;margin:0 auto">${svgPianta(d,'pdf')}</div>`:''}
   <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#6B7280;margin:14px 0 6px">Dettaglio lavori per locale</div>
   <table style="width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums">
     <thead><tr><th style="${th}">Lavorazione</th><th style="${th};${r}">Quantità</th><th style="${th};${r}">Prezzo</th><th style="${th};width:4px"></th><th style="${th};${r}">Importo</th></tr></thead>
