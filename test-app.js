@@ -96,11 +96,13 @@ try {
   // Bagno: 23,76×6,5 + 5×7 + 5×30 + 1800 + 420 + 18×35 (la riga senza nome non conta)
   const totBagno = 23.76 * 6.5 + 35 + 150 + 1800 + 420 + 630;
   const totSogg = 64.8 * 6.5 + 35 * 7;
-  const totRip = 250; // senza misure: solo lo smaltimento a corpo
+  // Ripostiglio senza misure: tinteggiatura senza importo a corpo → non entra;
+  // lo smaltimento (prima lavoro del locale) diventa una voce del cantiere da 250
   const T = sb.docTotali(d);
-  const sub = totBagno + totSogg + totRip, imp = sub * 0.95;
+  const sub = totBagno + totSogg + 250, imp = sub * 0.95;
   const locTot = run(sb, 'locTot');
-  const ok = supOk && near(locTot(bagno, d.prezzi), totBagno) && near(locTot(d.locali[2], d.prezzi), totRip)
+  const cant = JSON.stringify(d.cantiere.map(x => [x.nome, x.p]));
+  const ok = supOk && near(locTot(bagno, d.prezzi), totBagno) && near(locTot(d.locali[2], d.prezzi), 0) && cant === '[["Smaltimento macerie",250]]'
     && near(T.sub, sub) && near(T.imp, imp) && near(T.tot, imp * 1.22) && sb.locRighe(bagno, d.prezzi).length === 6;
   check('Calcoli: superfici, infissi, quantità automatiche e totali', ok, JSON.stringify({ s, T }));
 } catch (e) { check('Calcoli: superfici, infissi, quantità automatiche e totali', false, e.message); }
@@ -115,7 +117,8 @@ try {
   const ok = h1 === h2 && h1.includes('Rossi Costruzioni') && h1.includes('Mario Rossi') && h1.includes('P–2026/001')
     && h1.includes('Soggiorno') && h1.includes('Impianto idraulico') && h1.includes('5 punti acqua')
     && h1.includes('Finestra 600×900 mm') && h1.includes('stroke-dasharray') && h1.includes('Posa rivestimento')
-    && h1.includes('Piastrelle scelte dal cliente') && h1.includes(run(sb, 'prEur')(T.tot)) && h1.includes('Sconto 5%');
+    && h1.includes('Piastrelle scelte dal cliente') && h1.includes(run(sb, 'prEur')(T.tot)) && h1.includes('Sconto 5%')
+    && h1.includes('Per tutto il cantiere') && h1.includes('Smaltimento macerie');
   const sha = crypto.createHash('sha256').update(h1).digest('hex').slice(0, 16);
   check('PDF del preventivo: contenuti e determinismo (sha ' + sha + ')', ok, 'contenuto mancante');
 } catch (e) { check('PDF del preventivo: contenuti e determinismo', false, e.message); }
@@ -320,8 +323,8 @@ try {
   boot(sb);
   run(sb, `doc=normalizzaDoc(${JSON.stringify(DOC)});`);
   const rip = JSON.parse(run(sb, `doc.locali[2].lav.ts=true; doc.locali[2].corpo={tp:300}; JSON.stringify(locRighe(doc.locali[2], doc.prezzi).map(r=>[r.nome,r.u,r.tot]))`));
-  // Ripostiglio senza misure: tinteggiatura pareti a corpo 300, soffitto senza importo (escluso), smaltimento 250
-  const corpoOk = JSON.stringify(rip) === JSON.stringify([['Tinteggiatura pareti','a corpo',300],['Smaltimento macerie','a corpo',250]]);
+  // Ripostiglio senza misure: tinteggiatura pareti a corpo 300, soffitto senza importo (escluso)
+  const corpoOk = JSON.stringify(rip) === JSON.stringify([['Tinteggiatura pareti','a corpo',300]]);
   run(sb, `doc.via='disegno'; doc.pianta={walls:[]}; doc.locali[1].inPianta=true; doc.locali[1].daPianta=true;
            doc.locali[1].inf.push({tipo:'porta',lung:800,alt:2100,ante:1,apr:'battente',prezzo:0,pid:'p9'});
            doc.locali[1].dedExtra=1.5; wzTogliPianta();`);
@@ -329,6 +332,22 @@ try {
   const togliOk = dopo.via === 'manuale' && dopo.p === null && dopo.n === 3 && dopo.inf === 1 && !dopo.pid && dopo.ded === 0 && !dopo.flag;
   check('Senza misure (a corpo) e pianta tolta', corpoOk && togliOk, JSON.stringify({ rip, dopo }));
 } catch (e) { check('Senza misure (a corpo) e pianta tolta', false, e.message); }
+
+// 16) Usa come modello: stessi locali e lavori, cliente vuoto, nuovo numero;
+//     si salva solo quando c'è il nome. Elimina in blocco dei vecchi.
+try {
+  const vecchio = { id: 7, numero: 'P-1', mestiere: 'muratore', locali: [] };
+  const seed = { mv_prev: JSON.stringify([DOC, vecchio]) };
+  const sb = loadApp(seed);
+  boot(sb);
+  const r = JSON.parse(run(sb, `wzModello(1); JSON.stringify({nome:doc.cliente.nome, tel:doc.cliente.tel, loc:doc.locali.length, num:doc.numero, id:doc.id, stato:doc.stato, step:wzStep, n:preventivi.length})`));
+  const salvaVuoto = run(sb, 'wzSalvaOra()');
+  run(sb, `doc.cliente.nome='Nuovo'; wzSalvaOra(); eliminaVecchi();`);
+  const dopo = JSON.parse(run(sb, `JSON.stringify(preventivi.map(p=>[p.id===1?'orig':(p.v===2?'nuovo':'vecchio'), p.cliente&&p.cliente.nome]))`));
+  const ok = r.nome === '' && r.tel === '' && r.loc === 3 && r.id !== 1 && r.stato === 'bozza' && r.step === 0 && r.n === 2
+    && salvaVuoto === false && dopo.length === 2 && dopo.some(x => x[0] === 'orig' && x[1] === 'Mario Rossi') && dopo.some(x => x[0] === 'nuovo' && x[1] === 'Nuovo');
+  check('Usa come modello (cliente nuovo) ed eliminazione dei vecchi', ok, JSON.stringify({ r, salvaVuoto, dopo }));
+} catch (e) { check('Usa come modello (cliente nuovo) ed eliminazione dei vecchi', false, e.message); }
 
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);

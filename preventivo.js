@@ -1,6 +1,6 @@
 // ══════════════════════════════════════════════════════════
-//  PREVENTIVO — il flusso in 4 passi
-//  ① Locali (o Pianta, in arrivo)  ② Misure  ③ Lavori  ④ Preventivo
+//  PREVENTIVO — il flusso in 3 passi
+//  ① Locali (o Pianta) con le misure  ② Lavori  ③ Preventivo
 //  Un locale, una scheda: al passo Misure chiede le misure, al passo
 //  Lavori chiede le lavorazioni. Le quantità arrivano dalle misure.
 //  Documento v2:
@@ -19,8 +19,14 @@ const LAVORI_STD=[
   {id:'ir', nome:'Intonaco e rasatura',    su:'pareti'},
   {id:'tp', nome:'Tinteggiatura pareti',   su:'pareti'},
   {id:'ts', nome:'Tinteggiatura soffitto', su:'soffitto'},
-  {id:'cs', nome:'Controsoffitto',         su:'soffitto'},
-  {id:'sm', nome:'Smaltimento macerie',    su:'corpo'}
+  {id:'cs', nome:'Controsoffitto',         su:'soffitto'}
+];
+// Voci per tutto il cantiere (una volta sola, non per locale)
+const VOCI_CANTIERE=[
+  {nome:'Smaltimento macerie', p:250},
+  {nome:'Pulizia finale di cantiere', p:150},
+  {nome:'Trabattello / ponteggio', p:0},
+  {nome:'Pratiche edilizie (CILA)', p:0}
 ];
 const PREZZI_BASE={dp:12, ms:18, pp:30, ir:22, tp:6.5, ts:7, cs:35, sm:250};
 const SU_LBL={pareti:'m² di pareti', soffitto:'m² di soffitto', pavimento:'m² di pavimento', corpo:'a corpo'};
@@ -63,7 +69,7 @@ function nuovoDoc(){
     v:2, id:Date.now(), numero:nextNum(), data:ora.toLocaleDateString('it-IT'), dataISO:ora.toISOString(),
     stato:'bozza', mod:Date.now(), via:null,
     cliente:{nome:'', tel:'', email:'', indirizzo:''},
-    locali:[], prezzi:prezziListino(), tutti:{lav:{}},
+    locali:[], prezzi:prezziListino(), tutti:{lav:{}}, cantiere:[],
     sconto:0, iva:22, validita:30, totale:0
   };
 }
@@ -72,6 +78,13 @@ function normalizzaDoc(d){
   d.cliente=Object.assign({nome:'',tel:'',email:'',indirizzo:''}, d.cliente||{});
   d.prezzi=Object.assign({}, PREZZI_BASE, d.prezzi||{});
   d.tutti={lav:Object.assign({}, ((d.tutti||{}).lav)||{})};
+  d.cantiere=(Array.isArray(d.cantiere)?d.cantiere:[]).map(x=>Object.assign({nome:'',q:1,u:'a corpo',p:0}, x||{}));
+  // smaltimento macerie: prima era un lavoro per locale, ora è una voce del cantiere
+  if((d.locali||[]).some(l=>l && l.lav && l.lav.sm)){
+    if(!d.cantiere.some(x=>x.nome==='Smaltimento macerie')) d.cantiere.push({nome:'Smaltimento macerie', q:1, u:'a corpo', p:prNum((d.prezzi||{}).sm)||250});
+    d.locali.forEach(l=>{ if(l && l.lav) delete l.lav.sm; });
+  }
+  if(d.tutti.lav.sm) delete d.tutti.lav.sm;
   d.locali=(Array.isArray(d.locali)?d.locali:[]).map((l,i)=>{
     const n=Object.assign(nuovoLocale(i), l||{});
     n.lav=Object.assign({}, n.lav||{});
@@ -130,8 +143,16 @@ function locRighe(l, prezzi){
   return out;
 }
 const locTot=(l,prezzi)=>locRighe(l,prezzi).reduce((a,x)=>a+x.tot,0);
+// Voci del cantiere: {nome, q, u, p} come le lavorazioni a mano
+function cantiereRighe(d){
+  return (d.cantiere||[]).filter(x=>String(x.nome||'').trim()).map(x=>{
+    const c=x.u==='a corpo', q=c?1:prNum(x.q), p=prNum(x.p);
+    return {nome:x.nome, q, u:x.u||'a corpo', p, tot:q*p};
+  });
+}
+const cantiereTot=d=>cantiereRighe(d).reduce((a,x)=>a+x.tot,0);
 function docTotali(d){
-  const sub=(d.locali||[]).reduce((a,l)=>a+locTot(l,d.prezzi||{}),0);
+  const sub=(d.locali||[]).reduce((a,l)=>a+locTot(l,d.prezzi||{}),0)+cantiereTot(d);
   const sc=sub*Math.min(100,prNum(d.sconto))/100, imp=sub-sc, iva=imp*(Number(d.iva)||0)/100;
   return {sub, sc, imp, iva, tot:imp+iva};
 }
@@ -252,11 +273,15 @@ function buildPdfPrev(d){
       `<td style="${td};${r}">${prEur(x.tot)}</td></tr>`).join('');
     const note=String(l.note||'').trim() ? `<tr><td colspan="5" style="${td};color:#374151;font-style:italic">Note: ${esc(l.note)}</td></tr>` : '';
     return `<tbody class="no-break">${testa}${righe}${note}</tbody>`;   // un locale non si spezza tra due pagine
-  }).join('');
+  }).join('') + (()=>{
+    const rc=cantiereRighe(d); if(!rc.length) return '';
+    return `<tbody class="no-break"><tr><td colspan="4" style="${td};background:#F3F4F6;font-weight:700">Per tutto il cantiere</td><td style="${td};background:#F3F4F6;${r};font-weight:700">${prEur(cantiereTot(d))}</td></tr>`+
+      rc.map(x=>`<tr><td style="${td}">${esc(x.nome)}</td><td style="${td};${r}">${x.u==='a corpo'?'a corpo':prF2(x.q)+' '+esc(x.u)}</td><td style="${td};${r}">${prEur(x.p)}</td><td style="${td}"></td><td style="${td};${r}">${prEur(x.tot)}</td></tr>`).join('')+'</tbody>';
+  })();
   const indir=[c.indirizzo, c.tel, c.email].filter(Boolean).map(esc).join(' · ');
   return `
   <div style="display:flex;justify-content:space-between;gap:16px;padding-bottom:10px;border-bottom:2px solid #111827">
-    ${intestazionePDF('preventivo')}
+    ${intestazionePDF()}
     <div style="text-align:right;font-size:11px;color:#6B7280;white-space:nowrap">
       <div style="font-size:14px;font-weight:800;color:#111827">${esc(numDoc(d.numero))}</div>
       <div>${esc(d.data||'')}</div><div>Valido ${d.validita} giorni</div>
@@ -305,7 +330,8 @@ function wzApri(id){
   const p=preventivi.find(x=>String(x.id)===String(id)); if(!p) return false;
   if(p.v!==2){ alert('Questo preventivo è stato creato con la vecchia versione dell\'app e non si può più aprire. Puoi eliminarlo dall\'Archivio.'); return false; }
   doc=normalizzaDoc(JSON.parse(JSON.stringify(p)));
-  wzSel=null; wzStep= doc.locali.length ? 3 : 1;
+  const conLavori=doc.locali.some(l=>locRighe(l,doc.prezzi).length) || cantiereRighe(doc).length;
+  wzSel=null; wzStep= !doc.locali.length ? 1 : (conLavori ? 3 : 2);
   wzRender();
   return true;
 }
@@ -376,7 +402,7 @@ function wzSchermata(){
         <div class="wz-field"><label class="wz-lbl" for="wzMail">Email</label><input class="wz-input" id="wzMail" type="email" data-cli="email" value="${esc(c.email)}"></div>
       </div>
     </details>
-    ${doc.via ? `<button type="button" class="wz-primary wz-full" data-a="continua">Continua il preventivo →</button>` : `
+    ${doc.via ? `${String(c.nome||'').trim()?'':'<p class="wz-lead">Scrivi il nome del cliente e continua: locali, lavori e prezzi sono già pronti.</p>'}<button type="button" class="wz-primary wz-full" data-a="continua">Continua il preventivo →</button>` : `
     <h2 class="wz-h2">Come vuoi partire?</h2>
     <button type="button" class="wz-pick main" data-a="disegno">
       <span class="wz-ico">${icoPianta()}</span>
@@ -447,6 +473,17 @@ function wzSchermata(){
         <span class="n">${esc(l.nome||'Senza nome')}</span>
         <span class="d">${locMisurato(l)?'':'<span class="wz-pill todo">a corpo</span> '}${dd?esc(dd):(locMisurato(l)?'Solo i lavori comuni':'')}</span>
         <span class="v">${t?prEur(t):'—'}</span>${chev}</button>`; }).join('')}</div>
+    <div class="wz-sec">Per tutto il cantiere <small>una volta sola, non per locale</small></div>
+    <div class="wz-rows">${doc.cantiere.map((x,i)=>`
+      <div class="wz-man">
+        <input class="sm nm" data-gen="${i}" data-k="nome" value="${esc(x.nome)}" placeholder="Es. Smaltimento macerie" aria-label="Descrizione">
+        <label class="f"><span>Quantità</span><input class="sm" inputmode="decimal" data-gen="${i}" data-k="q" value="${x.u==='a corpo'?'':prIn(prNum(x.q))}"${x.u==='a corpo'?' disabled placeholder="—"':''}></label>
+        <label class="f"><span>Unità</span><select class="sm" data-gen="${i}" data-k="u">${UNITA.map(u=>`<option${u===x.u?' selected':''}>${u}</option>`).join('')}</select></label>
+        <label class="f"><span>Prezzo €</span><input class="sm" inputmode="decimal" data-gen="${i}" data-k="p" value="${prIn(prNum(x.p))}"></label>
+        <button type="button" class="wz-del" data-delgen="${i}" aria-label="Elimina voce">×</button>
+      </div>`).join('')}
+      <div class="wz-chips">${VOCI_CANTIERE.filter(v=>!doc.cantiere.some(x=>x.nome===v.nome)).map(v=>`<button type="button" class="wz-chip" data-addgen="${esc(v.nome)}">+ ${esc(v.nome)}</button>`).join('')}<button type="button" class="wz-chip" data-addgen="">+ Altra voce</button></div>
+    </div>
     ${pianta?'<button type="button" class="wz-ghost wz-full" data-a="torna-pianta">✏️ Modifica la pianta o le misure</button>':''}`;
   }
   // passo 3: riepilogo
@@ -457,10 +494,16 @@ function wzSchermata(){
       <div class="wz-ln"><span>${esc(x.nome)}</span><span class="t">${prEur(x.tot)}</span>
       <span class="q">${esc(x.inf?'1 pz · '+x.nota:qtaTesto(x)+(x.nota?' · '+x.nota:''))}${(x.u!=='a corpo'&&!x.inf)?' × '+prEur(x.p):''}</span></div>`).join('')}</div>`;
   }).join('');
+  const rc=cantiereRighe(doc);
+  const blocCant= rc.length ? `<div class="wz-sum-room"><h3>Per tutto il cantiere<span>${prEur(cantiereTot(doc))}</span></h3>${rc.map(x=>`
+      <div class="wz-ln"><span>${esc(x.nome)}</span><span class="t">${prEur(x.tot)}</span>
+      <span class="q">${x.u==='a corpo'?'a corpo':esc(prF2(x.q)+' '+x.u)+' × '+prEur(x.p)}</span></div>`).join('')}</div>` : '';
+  const senzaImpresa= typeof impresa!=='undefined' && !String((impresa||{}).nome||'').trim();
   const STATI={bozza:'📝 Bozza', inviato:'📤 Inviato', accettato:'✅ Accettato', rifiutato:'❌ Rifiutato'};
   return `
     <h2 class="wz-h2">Il preventivo</h2>
-    <div class="wz-sum">${blocchi||'<div class="wz-sum-room"><p class="wz-empty">Nessuna lavorazione ancora. Torna al passo Lavori.</p></div>'}</div>
+    ${senzaImpresa?`<div class="wz-nota">Il PDF uscirà senza il nome della tua impresa. <button type="button" class="wz-link-in" data-a="impresa">Completa i dati impresa →</button></div>`:''}
+    <div class="wz-sum">${(blocchi+blocCant)||'<div class="wz-sum-room"><p class="wz-empty">Nessuna lavorazione ancora. Torna al passo Lavori.</p></div>'}</div>
     <div class="wz-tot">
       <div class="r"><span>Subtotale lavori</span><span>${prEur(T.sub)}</span></div>
       <div class="r"><label for="wzSconto">Sconto %</label><input class="wz-mini" id="wzSconto" data-doc="sconto" inputmode="decimal" value="${doc.sconto?prIn(doc.sconto):''}" placeholder="0"></div>
@@ -525,6 +568,16 @@ function wzDisegna(){
     else wzRender();
   } });
 }
+// "Usa come modello": stessi locali, lavori e prezzi; cliente nuovo da scrivere.
+function wzModello(id){
+  const p=preventivi.find(x=>String(x.id)===String(id)); if(!p || p.v!==2) return false;
+  const ora=new Date();
+  doc=normalizzaDoc(JSON.parse(JSON.stringify(p)));
+  Object.assign(doc, {id:Date.now(), numero:nextNum(), data:ora.toLocaleDateString('it-IT'), dataISO:ora.toISOString(), stato:'bozza', mod:Date.now(), totale:0});
+  doc.cliente={nome:'', tel:'', email:'', indirizzo:''};
+  wzSel=null; wzStep=0; wzRender();
+  return true;
+}
 // Da pianta a elenco: i locali restano; le porte/finestre disegnate senza prezzo spariscono,
 // quelle con un prezzo diventano infissi normali.
 function wzTogliPianta(){
@@ -551,6 +604,14 @@ function wzClick(e){
   const st=t.closest('[data-step]'); if(st){ wzSalvaOra(); wzVai(+st.dataset.step); return; }
   const room=t.closest('[data-room]'); if(room){ wzApriScheda(+room.dataset.room); return; }
   const an=t.closest('[data-addnome]'); if(an){ wzAddLocale(an.dataset.addnome); return; }
+  const ag=t.closest('[data-addgen]');
+  if(ag){
+    const v=VOCI_CANTIERE.find(x=>x.nome===ag.dataset.addgen);
+    doc.cantiere.push({nome:ag.dataset.addgen, q:1, u:'a corpo', p:v?v.p:0}); wzSalva(); wzRender();
+    const ins=document.querySelectorAll(v?'[data-gen][data-k="p"]':'[data-gen][data-k="nome"]'); const u=ins[ins.length-1]; if(u){ u.focus(); u.select&&u.select(); }
+    return;
+  }
+  const dg=t.closest('[data-delgen]'); if(dg){ doc.cantiere.splice(+dg.dataset.delgen,1); wzSalva(); wzRender(); return; }
   const dl=t.closest('[data-dellocale]');
   if(dl){
     const l=doc.locali.find(x=>x.id===+dl.dataset.dellocale);
@@ -564,6 +625,7 @@ function wzClick(e){
   else if(act==='disegno') wzInizia('disegno');
   else if(act==='disegna') wzDisegna();
   else if(act==='torna-pianta') wzVai(1);
+  else if(act==='impresa'){ wzSalvaOra(); if(typeof goPage==='function') goPage('impostazioni'); }
   else if(act==='aggiungi-pianta'){ doc.via='disegno'; wzSalva(); wzRender(); wzDisegna(); }
   else if(act==='togli-pianta'){
     if(!confirm('Togliere la pianta?\nI locali restano, con le loro misure e i lavori.')) return;
@@ -597,6 +659,12 @@ function wzInput(e){
     const ci=document.querySelector('.wz-cta-info'); if(ci) ci.innerHTML=wzCtaInfo();
     wzSalva(); return;
   }
+  if(d.gen!==undefined && t.tagName==='INPUT'){
+    const x=doc.cantiere[+d.gen]; if(!x) return;
+    x[d.k]= d.k==='nome' ? t.value : prNum(t.value);
+    const ci=document.querySelector('.wz-cta-info'); if(ci) ci.innerHTML=wzCtaInfo();
+    wzSalva(); return;
+  }
   if(d.doc==='sconto'){ doc.sconto=Math.min(100,prNum(t.value)); wzAggTotali(); wzSalva(); }
 }
 // Tasto "Avanti" della tastiera: alla casella successiva.
@@ -621,6 +689,7 @@ function wzChange(e){
     if(on) doc.tutti.lav[id]=true; else delete doc.tutti.lav[id];
     wzSalva(); wzRender(); return;
   }
+  if(d.gen!==undefined && d.k==='u'){ const x=doc.cantiere[+d.gen]; if(x){ x.u=t.value; wzSalva(); wzRender(); } return; }
   if(d.doc==='iva'){ doc.iva=parseFloat(t.value)||0; wzAggTotali(); wzSalva(); }
   else if(d.doc==='validita'){ doc.validita=parseInt(t.value,10)||30; wzSalva(); }
   else if(d.doc==='stato'){ doc.stato=t.value; wzSalva(); }

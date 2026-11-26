@@ -487,7 +487,7 @@ const Pianta=(function(){
   const TIPI={
     porta:         {lbl:'Porta',          w:.80, h:2.10, s:0},
     finestra:      {lbl:'Finestra',       w:1.20, h:1.40, s:.90},
-    portafinestra: {lbl:'Portafinestra',  w:1.20, h:2.30, s:0},
+    portafinestra: {lbl:'Portafinestra',  w:1.40, h:2.30, s:0},
     vano:          {lbl:'Vano / nicchia', w:1.00, h:1.00, s:1.00}
   };
   function muroDi(f){

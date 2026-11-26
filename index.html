@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Facile Preventivo">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=35">
+<link rel="stylesheet" href="style.css?v=37">
 </head>
 <body>
 <!-- ═══ SCHERMATA DI ACCESSO (cancello: l'app sta sotto, coperta finché non entri) ═══ -->
@@ -84,10 +84,11 @@
   <button class="btn btn-primary btn-full dash-nuovo" id="btnNuovoPrev" onclick="nuovoPreventivo()">+ Nuovo preventivo</button>
 
   <div class="stats" id="statsGrid">
-    <div class="stat"><div class="stat-val" id="s1">0</div><div class="stat-lbl">Preventivi totali</div></div>
+    <div class="stat"><div class="stat-val" id="s3">0</div><div class="stat-lbl">Bozze</div></div>
+    <div class="stat"><div class="stat-val" id="s6">0</div><div class="stat-lbl">Inviati, in attesa</div></div>
     <div class="stat"><div class="stat-val" id="s2">0</div><div class="stat-lbl">Accettati</div></div>
-    <div class="stat"><div class="stat-val" id="s3">0</div><div class="stat-lbl">In attesa</div></div>
     <div class="stat"><div class="stat-val" id="s5">0</div><div class="stat-lbl">Rifiutati</div></div>
+    <div class="stat"><div class="stat-val" id="s1">0</div><div class="stat-lbl">Preventivi totali</div></div>
     <div class="stat"><div class="stat-val" id="s4" style="font-size:18px">€0</div><div class="stat-lbl">Valore accettati</div></div>
   </div>
 
@@ -114,7 +115,7 @@
     </div>
     <div class="card-body">
       <div class="field"><label class="label">Nome impresa *</label>
-        <input class="input" id="impNome" placeholder="Es. Rossi Imbianchini" oninput="salvaImpresa()"></div>
+        <input class="input" id="impNome" placeholder="Es. Rossi Costruzioni" oninput="salvaImpresa()"></div>
       <div class="field"><label class="label">P.IVA / C.F.</label>
         <input class="input" id="impPiva" placeholder="IT00000000000" oninput="salvaImpresa()"></div>
       <div class="row2">
@@ -229,7 +230,7 @@
 
 </div><!-- /app -->
 
-<!-- MODAL PDF FULLSCREEN (preventivo + sopralluogo) -->
+<!-- MODAL PDF FULLSCREEN -->
 <div id="pdfModal" style="display:none;position:fixed;inset:0;z-index:300;background:#fff;overflow-y:auto;-webkit-overflow-scrolling:touch">
   <!-- Header FISSO in cima -->
   <div id="pdfModalBar" style="position:fixed;top:0;left:0;right:0;z-index:310;background:#fff;border-bottom:2px solid #2563EB;padding:max(10px,env(safe-area-inset-top)) 14px 10px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.12)">
@@ -268,7 +269,7 @@
 <div class="pz-menu" id="menu" hidden>
   <button class="pz-mi" id="mi3d" type="button">Guarda in 3D</button>
   <button class="pz-mi" id="miFit" type="button">Centra il disegno</button>
-  <button class="pz-mi" id="miScala" type="button">Metti in scala</button>
+  <button class="pz-mi" id="miScala" type="button">Metti in scala ora</button>
   <button class="pz-mi" id="miAperture" type="button">Vani porta: dividono i locali ✓</button>
   <button class="pz-mi" id="miHelp" type="button">Come si usa</button>
   <button class="pz-mi pz-warn" id="miClear" type="button">Cancella tutto</button>
@@ -399,8 +400,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="app.js?v=35"></script>
-<script src="preventivo.js?v=35"></script>
-<script src="pianta.js?v=35"></script>
+<script src="app.js?v=37"></script>
+<script src="preventivo.js?v=37"></script>
+<script src="pianta.js?v=37"></script>
 </body>
 </html>
