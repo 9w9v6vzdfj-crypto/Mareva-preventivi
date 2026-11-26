@@ -314,5 +314,21 @@ try {
   check('Lavori in tutti i locali, eccezioni, listino', ok, JSON.stringify(r));
 } catch (e) { check('Lavori in tutti i locali, eccezioni, listino', false, e.message); }
 
+// 15) Senza misure: lavori a corpo; togliere la pianta lascia i locali.
+try {
+  const sb = loadApp({});
+  boot(sb);
+  run(sb, `doc=normalizzaDoc(${JSON.stringify(DOC)});`);
+  const rip = JSON.parse(run(sb, `doc.locali[2].lav.ts=true; doc.locali[2].corpo={tp:300}; JSON.stringify(locRighe(doc.locali[2], doc.prezzi).map(r=>[r.nome,r.u,r.tot]))`));
+  // Ripostiglio senza misure: tinteggiatura pareti a corpo 300, soffitto senza importo (escluso), smaltimento 250
+  const corpoOk = JSON.stringify(rip) === JSON.stringify([['Tinteggiatura pareti','a corpo',300],['Smaltimento macerie','a corpo',250]]);
+  run(sb, `doc.via='disegno'; doc.pianta={walls:[]}; doc.locali[1].inPianta=true; doc.locali[1].daPianta=true;
+           doc.locali[1].inf.push({tipo:'porta',lung:800,alt:2100,ante:1,apr:'battente',prezzo:0,pid:'p9'});
+           doc.locali[1].dedExtra=1.5; wzTogliPianta();`);
+  const dopo = JSON.parse(run(sb, `JSON.stringify({via:doc.via, p:doc.pianta, n:doc.locali.length, inf:doc.locali[1].inf.length, pid:doc.locali[1].inf.some(x=>x.pid), ded:doc.locali[1].dedExtra, flag:'daPianta' in doc.locali[1]})`));
+  const togliOk = dopo.via === 'manuale' && dopo.p === null && dopo.n === 3 && dopo.inf === 1 && !dopo.pid && dopo.ded === 0 && !dopo.flag;
+  check('Senza misure (a corpo) e pianta tolta', corpoOk && togliOk, JSON.stringify({ rip, dopo }));
+} catch (e) { check('Senza misure (a corpo) e pianta tolta', false, e.message); }
+
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);

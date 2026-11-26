@@ -847,7 +847,11 @@ const Pianta=(function(){
   const out={floor:$('rFloor'), ceil:$('rCeil'), walls:$('rWalls'), per:$('rPer')};
   $('chips').innerHTML=NOMI.map(n=>`<button type="button" class="pz-chip">${n}</button>`).join('');
   const evidenziaNome=()=>document.querySelectorAll('#chips .pz-chip').forEach(c=>c.classList.toggle('on', c.textContent===fName.value.trim()));
-  $('chips').addEventListener('click', e=>{ const c=e.target.closest('.pz-chip'); if(c){ fName.value=c.textContent; evidenziaNome(); } });
+  $('chips').addEventListener('click', e=>{
+    const lg=e.target.closest('[data-lega]');
+    if(lg){ const ri=selRegion; chiudiModal(); legaLocale(ri, +lg.dataset.lega); return; }
+    const c=e.target.closest('.pz-chip'); if(c){ fName.value=c.textContent; evidenziaNome(); }
+  });
   fName.addEventListener('input', evidenziaNome);
   const fmtIn=v=> v>0 ? v.toFixed(2).replace('.',',') : '';
   function aggiornaRisultati(){
@@ -867,6 +871,9 @@ const Pianta=(function(){
     fName.placeholder='Nome della stanza';
     fL.value= d ? fmtIn(d.L) : ''; fW.value= d ? fmtIn(d.W) : '';
     fH.value= d && d.H>0 ? fmtIn(d.H) : '2,70';
+    const esist=daCollegare();
+    $('chips').innerHTML=esist.map(l=>`<button type="button" class="pz-chip pz-chip-loc" data-lega="${l.id}">↔ ${esc(l.nome)}</button>`).join('')+
+      NOMI.map(n=>`<button type="button" class="pz-chip">${n}</button>`).join('');
     aggiornaRisultati(); evidenziaNome();
     modal.hidden=false;
     if(matchMedia('(pointer:fine)').matches) setTimeout(()=>fName.focus(),30);
@@ -1128,14 +1135,34 @@ const Pianta=(function(){
   }
   /* ── appena una stanza si chiude: "Che stanza è?" con i nomi da toccare ── */
   const nameBar=$('nameBar'); let nomeRi=-1;
-  $('nameChips').innerHTML=NOMI.slice(0,8).map(n=>`<button type="button" class="pz-chip" data-nome="${n}">${n}</button>`).join('')+
-    '<button type="button" class="pz-chip" data-nome="">Altro…</button>';
+  // locali del preventivo non ancora sulla pianta (es. pianta aggiunta dopo l'elenco)
+  const daCollegare=()=> docRef ? docRef.locali.filter(l=>l.inPianta===false && !l.daPianta && String(l.nome||'').trim()) : [];
+  function chipsNomi(){
+    const esist=daCollegare();
+    return esist.map(l=>`<button type="button" class="pz-chip pz-chip-loc" data-lega="${l.id}">↔ ${esc(l.nome)}</button>`).join('')+
+      NOMI.slice(0, esist.length?6:8).map(n=>`<button type="button" class="pz-chip" data-nome="${n}">${n}</button>`).join('')+
+      '<button type="button" class="pz-chip" data-nome="">Altro…</button>';
+  }
+  // collega la stanza ri a un locale già esistente (con le sue misure e lavori)
+  function legaLocale(ri, id){
+    collegaLocali();
+    const r=regions[ri], target=locDi(id); if(!r || !r.data || !target) return;
+    snapshot();
+    const d=r.data.ref, prima=locDi(d.locId);
+    d.locId=id;
+    if(prima && prima!==target && prima.daPianta && !locMisurato(prima) && !String(prima.nome||'').trim()) docRef.locali=docRef.locali.filter(l=>l!==prima);
+    aggiorna();
+    toast(`${target.nome} collegato alla pianta`+(locMisurato(target)?'':' · toccalo per le misure'));
+  }
   function chiediNome(ri){
-    nomeRi=ri; nameBar.hidden=false;
+    collegaLocali();
+    nomeRi=ri; $('nameChips').innerHTML=chipsNomi(); nameBar.hidden=false;
     nameBar.style.bottom=(window.innerHeight-drawer.getBoundingClientRect().top+8)+'px';
   }
   function chiudiNomi(){ if(nameBar && !nameBar.hidden){ nameBar.hidden=true; nomeRi=-1; } }
   $('nameChips').addEventListener('click', e=>{
+    const lg=e.target.closest('[data-lega]');
+    if(lg){ const ri=nomeRi; chiudiNomi(); legaLocale(ri, +lg.dataset.lega); return; }
     const b=e.target.closest('[data-nome]'); if(!b) return;
     const ri=nomeRi; chiudiNomi();
     if(!regions[ri]) return;
@@ -1423,6 +1450,7 @@ const Pianta=(function(){
     if(walls.length) inquadra(false); else { view={s:1, tx:W/2, ty:H/2}; }
     renderPanel(); etichettaAperture(); bottoniStoria(); requestDraw();
     let help=false; try{ help=localStorage.getItem(KEY_HELP)==='1'; }catch(_){}
+    if(daCollegare().length) toast('Disegna le stanze: quando una si chiude, scegli a quale locale corrisponde', 4500); else
     toast(help ? (walls.length ? 'Tocca una stanza per le misure, un muro per porte e finestre' : 'Disegna col dito il contorno della casa')
                : 'Disegna col dito · tocca stanze e muri per modificarli', 4200);
   }

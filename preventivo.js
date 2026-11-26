@@ -47,7 +47,7 @@ const prIn=v=> v>0 ? String(Math.round(v*100)/100).replace('.',',') : '';
 
 /* ── modello ── */
 function impVuoti(){ return {el:{on:false,p:0,nota:''}, id:{on:false,p:0,nota:''}}; }
-function nuovoLocale(id, nome){ return {id, nome:nome||'', L:0, W:0, H:H_BASE, lav:{}, imp:impVuoti(), inf:[], man:[], note:''}; }
+function nuovoLocale(id, nome){ return {id, nome:nome||'', L:0, W:0, H:H_BASE, lav:{}, corpo:{}, imp:impVuoti(), inf:[], man:[], note:''}; }
 function nuovoInfisso(tipo){ const d=TIPI_INF[tipo]||TIPI_INF.finestra; return {tipo:TIPI_INF[tipo]?tipo:'finestra', lung:d.lung, alt:d.alt, ante:d.ante, apr:'battente', prezzo:d.prezzo}; }
 // Prezzi proposti: quelli base, sostituiti da quelli del listino dell'impresa.
 function prezziListino(){
@@ -75,6 +75,7 @@ function normalizzaDoc(d){
   d.locali=(Array.isArray(d.locali)?d.locali:[]).map((l,i)=>{
     const n=Object.assign(nuovoLocale(i), l||{});
     n.lav=Object.assign({}, n.lav||{});
+    n.corpo=Object.assign({}, n.corpo||{});
     n.imp=Object.assign(impVuoti(), n.imp||{});
     IMPIANTI.forEach(k=>{ n.imp[k.id]=Object.assign({on:false,p:0,nota:''}, n.imp[k.id]||{}); });
     n.inf=(Array.isArray(n.inf)?n.inf:[]).map(x=>Object.assign(nuovoInfisso(x&&x.tipo), x||{}));
@@ -102,7 +103,13 @@ function locRighe(l, prezzi){
   const s=locSup(l), out=[];
   LAVORI_STD.forEach(x=>{
     if(!(l.lav||{})[x.id]) return;
-    const q= x.su==='corpo' ? 1 : (s ? s[x.su] : 0), p=prNum(prezzi[x.id]);
+    if(!s && x.su!=='corpo'){
+      // locale senza misure: il lavoro si prezza a corpo (se manca il prezzo non entra)
+      const p=prNum((l.corpo||{})[x.id]);
+      if(p) out.push({nome:x.nome, q:1, u:'a corpo', p, tot:p});
+      return;
+    }
+    const q= x.su==='corpo' ? 1 : s[x.su], p=prNum(prezzi[x.id]);
     out.push({nome:x.nome, q, u: x.su==='corpo'?'a corpo':'m²', su:x.su, p, tot:q*p});
   });
   IMPIANTI.forEach(k=>{
@@ -387,21 +394,22 @@ function wzSchermata(){
     const daMis=doc.locali.filter(l=>!locMisurato(l)).length;
     return `
     <h2 class="wz-h2">La pianta</h2>
-    <p class="wz-lead">${svg?(daMis?`Tocca le stanze in arancione per nome e misure (${daMis} da misurare).`:`Tutte le stanze hanno le misure${doc.pianta&&doc.pianta.inScala?' · pianta in scala':''}.`):'Disegna col dito: ogni stanza chiusa diventa un locale del preventivo.'}</p>
+    <p class="wz-lead">${svg?(daMis?`Tocca le stanze in arancione per nome e misure (${daMis} senza misure: se non le metti, i loro lavori vanno a corpo).`:`Tutte le stanze hanno le misure${doc.pianta&&doc.pianta.inScala?' · pianta in scala':''}.`):'Disegna col dito: ogni stanza chiusa diventa un locale del preventivo.'}</p>
     ${svg?`<div class="wz-plan">${svg}</div>`:`<button type="button" class="wz-plan wz-plan-vuota" data-a="disegna">${icoPianta()}<span>Foglio bianco: tocca per disegnare</span></button>`}
     <button type="button" class="${svg?'wz-ghost wz-full':'wz-primary wz-full'}" data-a="disegna">${svg?'✏️ Modifica la pianta':'Disegna la pianta'}</button>
     <div class="wz-rows">${doc.locali.map(l=>{ const s=locSup(l); return `
       <div class="wz-editrow"><button type="button" class="wz-row" data-room="${l.id}">
         <span class="n">${esc(l.nome||'Senza nome')}</span>
-        <span class="d">${l.inPianta===false?'Non più nella pianta':(s?`${prF2(l.L)} × ${prF2(l.W)} · h ${prF2(l.H)} · pareti ${prF1(s.pareti)} m²`:'Senza misure')}</span>
+        <span class="d">${l.inPianta===false?'Non nella pianta':(s?`${prF2(l.L)} × ${prF2(l.W)} · h ${prF2(l.H)} · pareti ${prF1(s.pareti)} m²`:'Senza misure')}</span>
         <span class="v">${s?`${prF1(s.pavimento)} m²`:'<span class="wz-pill todo">da misurare</span>'}</span>${chev}</button>
-        ${l.inPianta===false||!l.daPianta?`<button type="button" class="wz-del" data-dellocale="${l.id}" aria-label="Elimina ${esc(l.nome)}">×</button>`:''}</div>`; }).join('')}</div>
-    <button type="button" class="wz-add" data-a="addlocale">+ Locale fuori pianta (es. scale, esterno)</button>`;
+        ${l.inPianta===false?`<button type="button" class="wz-del" data-dellocale="${l.id}" aria-label="Elimina ${esc(l.nome)}">×</button>`:''}</div>`; }).join('')}</div>
+    <button type="button" class="wz-add" data-a="addlocale">+ Locale fuori pianta (es. scale, esterno)</button>
+    ${svg?'<button type="button" class="wz-link" data-a="togli-pianta">Togli la pianta e continua senza disegno</button>':''}`;
   }
   if(wzStep===1) return `
     <h2 class="wz-h2">Locali e misure</h2>
-    <p class="wz-lead">Tocca un nome per aggiungere il locale, poi scrivi le misure in metri. Il tasto "Avanti" della tastiera passa alla casella dopo.</p>
-    <div class="wz-chips">${NOMI_LOCALI.map(n=>`<button type="button" class="wz-chip" data-addnome="${esc(n)}">+ ${esc(n)}</button>`).join('')}</div>
+    <p class="wz-lead">Tocca un nome per aggiungere il locale, poi scrivi le misure in metri. Le misure sono facoltative: senza, i lavori si prezzano a corpo.</p>
+    <div class="wz-chips">${['Lavori generali'].concat(NOMI_LOCALI).map(n=>`<button type="button" class="wz-chip" data-addnome="${esc(n)}">+ ${esc(n)}</button>`).join('')}</div>
     <div class="wz-rows">${doc.locali.map(l=>{ const s=locSup(l); return `
       <div class="wz-loc">
         <div class="wz-editrow"><input class="wz-input wz-loc-n" data-nome="${l.id}" value="${esc(l.nome)}" placeholder="Nome del locale" aria-label="Nome locale" enterkeyhint="next">
@@ -415,7 +423,8 @@ function wzSchermata(){
       </div>`; }).join('')}
       ${doc.locali.length?'':'<p class="wz-empty">Nessun locale ancora: tocca un nome qui sopra.</p>'}
     </div>
-    <button type="button" class="wz-add" data-a="addlocale">+ Altro locale</button>`;
+    <button type="button" class="wz-add" data-a="addlocale">+ Altro locale</button>
+    <button type="button" class="wz-ghost wz-full" data-a="aggiungi-pianta">${icoPianta()} Disegna la pianta di questi locali</button>`;
   if(wzStep===2){
     const n=doc.locali.length;
     const comuni=LAVORI_STD.map(x=>{
@@ -436,7 +445,7 @@ function wzSchermata(){
     <div class="wz-rows">${doc.locali.map(l=>{ const t=locTot(l,doc.prezzi), dd=wzDiff(l); return `
       <button type="button" class="wz-row" data-room="${l.id}">
         <span class="n">${esc(l.nome||'Senza nome')}</span>
-        <span class="d">${locMisurato(l)?(dd?esc(dd):'Solo i lavori comuni'):'<span class="wz-pill todo">senza misure</span>'}</span>
+        <span class="d">${locMisurato(l)?'':'<span class="wz-pill todo">a corpo</span> '}${dd?esc(dd):(locMisurato(l)?'Solo i lavori comuni':'')}</span>
         <span class="v">${t?prEur(t):'—'}</span>${chev}</button>`; }).join('')}</div>
     ${pianta?'<button type="button" class="wz-ghost wz-full" data-a="torna-pianta">✏️ Modifica la pianta o le misure</button>':''}`;
   }
@@ -516,6 +525,17 @@ function wzDisegna(){
     else wzRender();
   } });
 }
+// Da pianta a elenco: i locali restano; le porte/finestre disegnate senza prezzo spariscono,
+// quelle con un prezzo diventano infissi normali.
+function wzTogliPianta(){
+  doc.via='manuale'; doc.pianta=null;
+  doc.locali.forEach(l=>{
+    l.inf=l.inf.filter(x=>!x.pid || prNum(x.prezzo)).map(x=>{ const y=Object.assign({},x); delete y.pid; return y; });
+    delete l.daPianta; delete l.inPianta; l.dedExtra=0;
+    if(!String(l.nome||'').trim()) l.nome='Locale';
+  });
+  wzSalva(); wzRender();
+}
 function wzAddLocale(nome){
   const id=doc.locali.length ? Math.max(...doc.locali.map(l=>l.id))+1 : 1;
   let n=nome||'Locale '+(doc.locali.length+1);
@@ -544,6 +564,11 @@ function wzClick(e){
   else if(act==='disegno') wzInizia('disegno');
   else if(act==='disegna') wzDisegna();
   else if(act==='torna-pianta') wzVai(1);
+  else if(act==='aggiungi-pianta'){ doc.via='disegno'; wzSalva(); wzRender(); wzDisegna(); }
+  else if(act==='togli-pianta'){
+    if(!confirm('Togliere la pianta?\nI locali restano, con le loro misure e i lavori.')) return;
+    wzTogliPianta(); wzToast('Pianta tolta: i locali restano');
+  }
   else if(act==='avanti') wzAvanti();
   else if(act==='indietro') wzIndietro();
   else if(act==='addlocale') wzAddLocale();
@@ -650,9 +675,16 @@ function wzDisegnaMisure(){
     <div class="wz-kv" id="mKv">${wzKv(locSup(l))}</div>
     <div class="wz-sh-foot"><button type="button" class="wz-ghost" data-sh="close">Annulla</button><button type="button" class="wz-primary" data-sh="salva-mis">Salva misure</button></div>`;
 }
+const aCorpoQui=(l,x)=>x.su!=='corpo' && !locSup(l);
 function wzQLav(l,x){
-  const s=locSup(l), on=!!l.lav[x.id], q= x.su==='corpo' ? 1 : (s ? s[x.su] : 0);
-  return (x.su==='corpo' ? 'a corpo' : (s ? `${prF2(q)} ${SU_LBL[x.su]}` : 'mancano le misure')) + (on && q ? ` → ${prEur(q*prNum(doc.prezzi[x.id]))}` : '');
+  const s=locSup(l), on=!!l.lav[x.id];
+  if(aCorpoQui(l,x)){ const p=prNum(l.corpo[x.id]); return 'senza misure: prezzo a corpo'+(on&&p?` → ${prEur(p)}`:(on?' · scrivi l\'importo':'')); }
+  const q= x.su==='corpo' ? 1 : s[x.su];
+  return (x.su==='corpo' ? 'a corpo' : `${prF2(q)} ${SU_LBL[x.su]}`) + (on && q ? ` → ${prEur(q*prNum(doc.prezzi[x.id]))}` : '');
+}
+function wzPrezzoLav(l,x){
+  if(aCorpoQui(l,x)) return `<input inputmode="decimal" data-corpo="${x.id}" value="${prIn(prNum(l.corpo[x.id]))}" placeholder="0" aria-label="Importo a corpo ${x.nome}"><small>€ a corpo</small>`;
+  return `<input inputmode="decimal" data-prezzo="${x.id}" value="${prIn(prNum(doc.prezzi[x.id]))}" aria-label="Prezzo ${x.nome}"><small>${x.su==='corpo'?'€ a corpo':'€ al m²'}</small>`;
 }
 function wzDisegnaLavori(){
   const l=wzLoc(), s=locSup(l);
@@ -662,13 +694,14 @@ function wzDisegnaLavori(){
     ${wzDims(l,'s')}
     <div class="wz-kv" id="lavKv">${wzKv(s)}</div>
 
+    ${s?'':'<p class="wz-nota">Senza misure: scrivi per ogni lavoro l\'importo a corpo. Se più avanti metti le misure, il prezzo torna al m².</p>'}
     <div class="wz-sec">Lavori più usati <small>quelli "in tutti" sono già spuntati</small></div>
     <div class="wz-rows">${LAVORI_STD.map(x=>{ const on=!!l.lav[x.id], com=!!doc.tutti.lav[x.id]; return `
       <label class="wz-lav${on?' on':''}">
         <input type="checkbox" data-lav="${x.id}"${on?' checked':''}>
         <span class="ln-n">${x.nome}${com?` <em class="wz-com">${on?'in tutti':'tolto qui'}</em>`:''}</span>
         <span class="ln-q${(!s&&x.su!=='corpo')?' warn':''}" data-q="${x.id}">${wzQLav(l,x)}</span>
-        <span class="ln-p"><input inputmode="decimal" data-prezzo="${x.id}" value="${prIn(prNum(doc.prezzi[x.id]))}" aria-label="Prezzo ${x.nome}"><small>${x.su==='corpo'?'€ a corpo':'€ al m²'}</small></span>
+        <span class="ln-p">${wzPrezzoLav(l,x)}</span>
       </label>`; }).join('')}</div>
 
     <div class="wz-sec">Impianti <small>a corpo</small></div>
@@ -761,10 +794,14 @@ function wzSheetInput(e){
     const pre=t.id.charAt(0);
     const nuovo={L:prNum(wzEl(pre+'L').value), W:prNum(wzEl(pre+'W').value), H:prNum(wzEl(pre+'H').value)||H_BASE};
     if(pre==='m'){ const kv=wzEl('mKv'); if(kv) kv.innerHTML=wzKv(locSup(Object.assign({}, l, nuovo))); return; }
-    Object.assign(l, nuovo); wzAggLavori(); wzSalva(); return;   // scheda lavori: le misure valgono subito
+    const prima=!!locSup(l);
+    Object.assign(l, nuovo); wzSalva();
+    if(prima!==!!locSup(l)){ wzDisegnaLavori(); const el=wzEl(t.id); if(el){ el.focus(); const v=el.value; el.value=''; el.value=v; } return; }
+    wzAggLavori(); return;   // scheda lavori: le misure valgono subito
   }
   if(d.shNome!==undefined){ l.nome=t.value; wzSalva(); return; }
   if(d.prezzo) wzSetPrezzo(d.prezzo, prNum(t.value));
+  else if(d.corpo) l.corpo[d.corpo]=prNum(t.value);
   else if(d.impP) l.imp[d.impP].p=prNum(t.value);
   else if(d.impN) l.imp[d.impN].nota=t.value;
   else if(d.inf!==undefined && t.tagName==='INPUT') l.inf[+d.inf][d.k]= d.k==='prezzo' ? prNum(t.value) : (parseInt(t.value,10)||0);
