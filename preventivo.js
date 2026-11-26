@@ -177,10 +177,13 @@ function svgPianta(d, fase){
   if(!a || !a.muri || !a.muri.length) return '';
   const pdf=fase==='pdf';
   const [x0,y0,x1,y1]=a.box, S=Math.max(x1-x0,y1-y0,a.cell*6), pad=S*.04+a.cell;
-  const vb=[x0-pad,y0-pad,(x1-x0)+2*pad,(y1-y0)+2*pad].map(v=>+v.toFixed(1)).join(' ');
+  const vbA=[x0-pad,y0-pad,(x1-x0)+2*pad,(y1-y0)+2*pad].map(v=>+v.toFixed(1)), vb=vbA.join(' ');
+  // misura in pixel esplicita: senza, chi trasforma la pagina in PDF (html2canvas)
+  // può prendere la pianta a dimensione "naturale" e mostrarne solo un angolo
+  const pxW=600, pxH=Math.max(60, Math.round(pxW*vbA[3]/vbA[2]));
   const sw=S/170, fs0=S/24;
   const locs=new Map((d.locali||[]).map(l=>[l.id,l]));
-  let out=`<svg viewBox="${vb}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pianta dei locali" style="display:block;width:100%;height:auto;max-height:${pdf?'none':'320px'}">`;
+  let out=`<svg viewBox="${vb}" width="${pxW}" height="${pxH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pianta dei locali" style="display:block;width:100%;height:auto;max-height:${pdf?'none':'320px'}">`;
   (a.stanze||[]).forEach(st=>{
     const l=locs.get(st.locId);
     const s=l?locSup(l):null;
