@@ -680,7 +680,7 @@ function inviaPDF(){
     const box=document.createElement('div');
     box.style.cssText='position:fixed;left:-10000px;top:0;width:720px;overflow:hidden';
     const foglio=document.createElement('div');
-    foglio.style.cssText='background:#fff;color:#111827;font-family:-apple-system,Arial,sans-serif;font-size:12px;line-height:1.45';
+    foglio.style.cssText='-webkit-text-size-adjust:100%;text-size-adjust:100%;padding:0 6px;background:#fff;color:#111827;font-family:-apple-system,Arial,sans-serif;font-size:12px;line-height:1.45';
     foglio.innerHTML=document.getElementById('pdfModalContent').innerHTML;
     box.appendChild(foglio); document.body.appendChild(box);
     return html2pdf().set({
