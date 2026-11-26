@@ -364,6 +364,29 @@ const Pianta=(function(){
   }
 
   /* ── pareti spezzate agli incroci (gomma precisa) e senza doppioni ── */
+  /* ── CODINE OLTRE GLI ANGOLI ──
+     Col dito si va spesso un po' oltre l'angolo: resta un pezzetto di muro con
+     un'estremità libera che prosegue dritto oltre un incrocio. Si toglie se è
+     corto (maxLen) e se all'incrocio c'è il suo proseguimento più UN solo muro
+     di traverso (angolo o T). Le spallette (pezzi di traverso) non si toccano. */
+  function tagliaCode(list, maxLen){
+    const tocca=(w,pt)=>list.some(o=>o!==w && contiene(o,pt));
+    const cand=list.filter(w=>{
+      if((w.x2-w.x1)+(w.y2-w.y1)>maxLen) return false;
+      return tocca(w,{x:w.x1,y:w.y1}) !== tocca(w,{x:w.x2,y:w.y2});   // un capo libero, l'altro attaccato
+    });
+    if(!cand.length) return list;
+    const togli=new Set();
+    for(const w of cand){
+      const hor=w.y1===w.y2, a={x:w.x1,y:w.y1}, b={x:w.x2,y:w.y2};
+      const J= tocca(w,a) ? a : b;
+      const altri=list.filter(o=>o!==w && contiene(o,J));
+      const proseguimento=altri.some(o=>(o.y1===o.y2)===hor && (hor ? (o.x1===J.x||o.x2===J.x) : (o.y1===J.y||o.y2===J.y)));
+      const traverso=altri.filter(o=>(o.y1===o.y2)!==hor && !cand.includes(o));
+      if(proseguimento && traverso.length===1) togli.add(w);
+    }
+    return togli.size ? list.filter(w=>!togli.has(w)) : list;
+  }
   function sistemaPareti(list){
     const out=[];
     for(const w of list){
@@ -1192,7 +1215,7 @@ const Pianta=(function(){
         const prima=regions.map(()=>0);
         const primaGrid=grid;
         snapshot();
-        walls=sistemaPareti(walls.concat(nuove));
+        walls=tagliaCode(sistemaPareti(walls.concat(nuove)), Math.max(CELL*3, 34/view.s));
         inScala=false; avvisi=[];
         ghost={pts:d.pts, walls:nuove, t0:performance.now()};
         // lc delle nuove stanze, verificati sulla griglia vecchia
@@ -1669,5 +1692,6 @@ const Pianta=(function(){
   // Ricalcola i collegamenti stanze↔locali (es. dopo modifiche nel preventivo).
   function aggiornaDoc(d){ carica(d); alChiudere=null; ricalcola(); esporta(); docRef=null; }
   bottoniStoria();
-  return {apri, chiudi, scala, aggiornaDoc, controllaLocale, aperto:()=>aperto};
+  return {apri, chiudi, scala, aggiornaDoc, controllaLocale, aperto:()=>aperto,
+          _tagliaCode:(ws,max)=>tagliaCode(sistemaPareti(ws), max)};   // per i test
 })();
