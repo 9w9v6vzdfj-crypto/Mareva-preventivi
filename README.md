@@ -89,6 +89,6 @@ Regola: **non si rilascia se non è tutto verde**. Il workflow GitHub Actions
 ## Rilascio
 
 1. Test tutti verdi (`node test-app.js`).
-2. Bumpa `CACHE` in `sw.js` (es. `facile-preventivo-v14` → `v15`): è il
+2. Bumpa `CACHE` in `sw.js` e il `?v=` di script e CSS in `index.html` (es. `facile-preventivo-v14` → `v15`): è il
    cache-busting che fa arrivare la nuova versione agli utenti.
 3. Pubblica i file statici.
