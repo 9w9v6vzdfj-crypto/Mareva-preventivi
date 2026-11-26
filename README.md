@@ -1,6 +1,9 @@
 # Facile Preventivo
 
-PWA per imprese edili e artigiani per fare **preventivi** dal telefono, in
+PWA per imprese edili e artigiani per fare **preventivi** dal telefono.
+All'apertura ci sono solo due scelte: **Disegna la pianta** o **Senza disegno**;
+in basso **Preventivi** (bozze e preventivi fatti, filtrati per stato) e
+**Impresa**. Il flusso ha
 tre passi sempre uguali: **Locali (o Pianta) con le misure → Lavori →
 Preventivo**, poi un PDF con l'intestazione dell'impresa, da stampare o inviare
 (📤 Invia: PDF vero condiviso dal telefono). Archivio con stati (bozza /
@@ -44,7 +47,7 @@ Pages).
 
 | File | Ruolo |
 |---|---|
-| `index.html` | Struttura delle pagine (home, preventivo, archivio, impresa) |
+| `index.html` | Struttura delle pagine (nuovo/preventivo, preventivi, impresa) |
 | `app.js` | Auth, store, sync cloud, archivio, backup, abbonamento, guida, stampa PDF |
 | `preventivo.js` | Il preventivo a passi: modello dati, calcoli, schede dei locali, pianta 2D, PDF |
 | `pianta.js` | Il foglio di disegno: riconoscimento stanze, misure, porte/finestre, messa in scala, 3D |

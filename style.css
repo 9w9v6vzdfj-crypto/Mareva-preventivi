@@ -631,3 +631,21 @@ select.wz-mini{width:auto;text-align:left}
 .wz-ghost svg{width:30px;height:auto}
 #piantaOv .pz-chip-loc{border-color:var(--accent);color:var(--accent);font-weight:600}
 .wz-link-in{background:none;border:none;padding:0;color:var(--accent);font-weight:700;font-size:13px;cursor:pointer;text-decoration:underline}
+/* ── pagina iniziale: solo le due scelte, centrate ── */
+#wz.wz-root-start{min-height:calc(100vh - 48px - 64px - 32px - env(safe-area-inset-bottom));min-height:calc(100dvh - 48px - 64px - 32px - env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:center}
+.page-wz:has(.wz-root-start){padding-bottom:80px}
+.wz-start{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;max-width:460px}
+.wz-big{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;aspect-ratio:1/1.05;padding:18px 10px;
+  border-radius:22px;border:1.5px solid var(--border);background:var(--white);color:var(--text);cursor:pointer;box-shadow:var(--shadow);
+  -webkit-tap-highlight-color:transparent;transition:transform .12s, border-color .12s}
+.wz-big:active{transform:scale(.97);border-color:var(--accent)}
+.wz-big-ico{width:84px;height:84px;border-radius:22px;background:var(--accent-lt);display:grid;place-items:center}
+.wz-big-ico svg{width:56px;height:auto}
+.wz-big b{font-size:16px;font-weight:700;text-align:center;line-height:1.25}
+/* ── pagina Preventivi: filtri per stato ── */
+.filtri{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;-webkit-overflow-scrolling:touch}
+.filtro{flex:0 0 auto;border:1px solid var(--border);background:var(--white);color:var(--text);border-radius:999px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer}
+.filtro b{color:var(--sub);font-weight:700;margin-left:2px}
+.filtro.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.filtro.on b{color:#fff}
+.filtri-nota{font-size:13px;color:var(--sub);margin:-4px 0 12px}
