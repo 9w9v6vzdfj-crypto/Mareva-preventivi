@@ -601,6 +601,8 @@ function numDoc(n){ return String(n||'').replace(/^[^\p{L}\p{N}]+/u,'').trim(); 
 // ══════════════════════════════════════════════════════════
 let _pdfOpen = false;
 function apriPdfModal(htmlContenuto, titolo){
+  _pdfPronto=null;
+  const bi=document.getElementById('btnInvia'); if(bi){ bi.disabled=false; bi.textContent='📤 Invia'; }
   document.getElementById('pdfModalContent').innerHTML = htmlContenuto;
   document.getElementById('pdfModalTitolo').textContent = titolo;
   const m = document.getElementById('pdfModal');
@@ -638,6 +640,67 @@ document.addEventListener('keydown', function(e){
     if(_pdfOpen) chiudiPdfModal();
   }
 });
+// ── INVIA: un PDF vero (html2pdf, caricato solo quando serve) condiviso con
+// WhatsApp / email dal menu del telefono. In due tempi: prima si prepara il
+// file, poi si condivide (su iPhone la condivisione deve partire da un tocco).
+let _pdfPronto=null;
+function caricaScript(src){
+  return new Promise((ok,ko)=>{
+    if([...document.scripts].some(s=>s.src===src)) return ok();
+    const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=ko; document.head.appendChild(s);
+  });
+}
+function _nomeFilePdf(){
+  const t=(document.getElementById('pdfModalTitolo').textContent||'Preventivo').trim();
+  const cli=(typeof doc!=='undefined' && doc && doc.cliente && doc.cliente.nome) ? ' '+doc.cliente.nome : '';
+  return (t+cli).replace(/[\\/:*?"<>|–]+/g,'-').replace(/\s+/g,' ').trim()+'.pdf';
+}
+function _condividiPdf(){
+  const f=_pdfPronto; if(!f) return Promise.resolve();
+  if(navigator.canShare && navigator.canShare({files:[f]})){
+    return navigator.share({files:[f], title:f.name}).catch(e=>{ if(e && e.name==='NotAllowedError') throw e; });
+  }
+  const url=URL.createObjectURL(f), a=document.createElement('a');
+  a.href=url; a.download=f.name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+  return Promise.resolve();
+}
+function inviaPDF(){
+  const btn=document.getElementById('btnInvia');
+  const nome=_nomeFilePdf();
+  if(_pdfPronto && _pdfPronto.name===nome){
+    _condividiPdf().catch(()=>{});
+    return;
+  }
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Preparo…'; }
+  const fine=t=>{ if(btn){ btn.disabled=false; btn.textContent=t; } };
+  caricaScript('https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js').then(()=>{
+    // contenitore fuori schermo; alla libreria si passa il foglio INTERNO, senza
+    // posizionamento (altrimenti "fotografa" la zona fuori schermo: pagina bianca)
+    const box=document.createElement('div');
+    box.style.cssText='position:fixed;left:-10000px;top:0;width:720px;overflow:hidden';
+    const foglio=document.createElement('div');
+    foglio.style.cssText='background:#fff;color:#111827;font-family:-apple-system,Arial,sans-serif;font-size:12px;line-height:1.45';
+    foglio.innerHTML=document.getElementById('pdfModalContent').innerHTML;
+    box.appendChild(foglio); document.body.appendChild(box);
+    return html2pdf().set({
+      margin:[12,12,14,12], filename:nome,
+      image:{type:'jpeg', quality:0.95},
+      html2canvas:{scale:2, backgroundColor:'#ffffff'},
+      jsPDF:{unit:'mm', format:'a4', orientation:'portrait'},
+      pagebreak:{mode:['css','legacy'], avoid:['tr','.no-break','.firme']}
+    }).from(foglio).outputPdf('blob').then(blob=>{
+      box.remove();
+      _pdfPronto=new File([blob], nome, {type:'application/pdf'});
+      fine('📤 Condividi');
+      return _condividiPdf().catch(()=>{ /* serve un altro tocco: il bottone ora dice "Condividi" */ });
+    }, e=>{ box.remove(); throw e; });
+  }).catch(()=>{
+    fine('📤 Invia');
+    alert('Per creare il PDF da inviare serve internet.\nIn alternativa: Stampa → Salva come PDF.');
+  });
+}
+
 // Stampa / salva PDF tramite iframe isolato: il documento dell'app NON viene
 // mai sostituito, quindi al termine si torna sempre all'app (niente blocchi su iOS).
 function stampaPDF(){
@@ -719,7 +782,7 @@ function prevItemHTML(p,compact){
     : `<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();apriPrev('${id}')">✏️ Modifica</button>
     <button class="btn btn-success btn-sm" onclick="event.stopPropagation();pdfById('${id}')">⬇ PDF</button>
-    <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();duplicaPrev('${id}')">⧉ Duplica</button>
+    <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();duplicaPrev('${id}')">⧉ Usa come modello</button>
     <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--sub);font-weight:600">Stato:
       <select class="status-select" style="${statoStyle[p.stato||'bozza']||statoStyle.bozza}" onclick="event.stopPropagation()" onchange="cambiaStato('${id}',this.value)">
         <option value="bozza" ${p.stato==='bozza'?'selected':''}>📝 Bozza</option>

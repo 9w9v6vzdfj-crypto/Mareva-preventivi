@@ -49,13 +49,21 @@ const prIn=v=> v>0 ? String(Math.round(v*100)/100).replace('.',',') : '';
 function impVuoti(){ return {el:{on:false,p:0,nota:''}, id:{on:false,p:0,nota:''}}; }
 function nuovoLocale(id, nome){ return {id, nome:nome||'', L:0, W:0, H:H_BASE, lav:{}, imp:impVuoti(), inf:[], man:[], note:''}; }
 function nuovoInfisso(tipo){ const d=TIPI_INF[tipo]||TIPI_INF.finestra; return {tipo:TIPI_INF[tipo]?tipo:'finestra', lung:d.lung, alt:d.alt, ante:d.ante, apr:'battente', prezzo:d.prezzo}; }
+// Prezzi proposti: quelli base, sostituiti da quelli del listino dell'impresa.
+function prezziListino(){
+  const l=Store.loadListino(), p=Object.assign({}, PREZZI_BASE);
+  LAVORI_STD.forEach(x=>{ if(Number.isFinite(l[x.id])) p[x.id]=l[x.id]; });
+  return p;
+}
+// Un locale nuovo riceve i lavori scelti "in tutti i locali".
+function conLavoriComuni(l, d){ Object.assign(l.lav, ((d&&d.tutti)||{}).lav||{}); return l; }
 function nuovoDoc(){
   const ora=new Date();
   return {
     v:2, id:Date.now(), numero:nextNum(), data:ora.toLocaleDateString('it-IT'), dataISO:ora.toISOString(),
     stato:'bozza', mod:Date.now(), via:null,
     cliente:{nome:'', tel:'', email:'', indirizzo:''},
-    locali:[], prezzi:Object.assign({}, PREZZI_BASE, Store.loadListino()),
+    locali:[], prezzi:prezziListino(), tutti:{lav:{}},
     sconto:0, iva:22, validita:30, totale:0
   };
 }
@@ -63,6 +71,7 @@ function nuovoDoc(){
 function normalizzaDoc(d){
   d.cliente=Object.assign({nome:'',tel:'',email:'',indirizzo:''}, d.cliente||{});
   d.prezzi=Object.assign({}, PREZZI_BASE, d.prezzi||{});
+  d.tutti={lav:Object.assign({}, ((d.tutti||{}).lav)||{})};
   d.locali=(Array.isArray(d.locali)?d.locali:[]).map((l,i)=>{
     const n=Object.assign(nuovoLocale(i), l||{});
     n.lav=Object.assign({}, n.lav||{});
@@ -267,22 +276,23 @@ function buildPdfPrev(d){
   </div>`;
 }
 
-/* ══════════ EDITOR ══════════ */
-let doc=null, wzStep=0, wzSel=null, _wzSaveT=null, _wzToastT=null;
-const passiLbl=()=>[doc&&doc.via==='disegno'?'Pianta':'Locali','Misure','Lavori','Preventivo'];
+/* ══════════ EDITOR ══════════
+   0 = cliente · 1 = Locali (o Pianta) con le misure · 2 = Lavori · 3 = Preventivo */
+let doc=null, wzStep=0, wzSel=null, _wzSaveT=null, _wzToastT=null, _wzMisPrima=null;
+const passiLbl=()=>[doc&&doc.via==='disegno'?'Pianta':'Locali','Lavori','Preventivo'];
 
 function wzEl(id){ return document.getElementById(id); }
 function wzToast(msg){
   const t=wzEl('wzToast'); if(!t) return;
   t.textContent=msg; t.style.display='block';
-  clearTimeout(_wzToastT); _wzToastT=setTimeout(()=>{ t.style.display='none'; }, 2600);
+  clearTimeout(_wzToastT); _wzToastT=setTimeout(()=>{ t.style.display='none'; }, 2800);
 }
 function wzNuovo(){ doc=nuovoDoc(); wzStep=0; wzSel=null; wzChiudiScheda(true); wzRender(); }
 function wzApri(id){
   const p=preventivi.find(x=>String(x.id)===String(id)); if(!p) return false;
   if(p.v!==2){ alert('Questo preventivo è stato creato con la vecchia versione dell\'app e non si può più aprire. Puoi eliminarlo dall\'Archivio.'); return false; }
   doc=normalizzaDoc(JSON.parse(JSON.stringify(p)));
-  wzSel=null; wzStep= doc.locali.length ? 4 : 1;
+  wzSel=null; wzStep= doc.locali.length ? 3 : 1;
   wzRender();
   return true;
 }
@@ -307,31 +317,36 @@ function wzSalva(){
 }
 // Il prezzo di un lavoro più usato diventa quello proposto nei prossimi preventivi.
 function wzAggiornaListino(id, v){ const l=Store.loadListino(); l[id]=v; Store.saveListino(l); }
+function wzSetPrezzo(id, v){ if(!doc) return; doc.prezzi[id]=v; wzAggiornaListino(id, v); }
 
 /* ── schermate ── */
+const IND_LBL=['','← Cliente','← '+'Locali','← Lavori'];
 function wzRender(){
   const root=wzEl('wz'); if(!root) return;
   if(!doc) doc=nuovoDoc();
   const inizio=wzStep===0;
   const salvato=preventivi.some(p=>String(p.id)===String(doc.id));
+  const indietro= wzStep===2 ? (doc.via==='disegno'?'← Pianta':'← Locali') : IND_LBL[wzStep];
   root.innerHTML=`
     <div class="wz-head">
       <button type="button" class="wz-head-t" data-a="cliente" aria-label="Dati del cliente"><b>${inizio?(doc.via?esc(doc.cliente.nome||'Cliente'):'Nuovo preventivo'):esc(doc.cliente.nome||'Senza nome')}</b>
         <span>${esc(numDoc(doc.numero))} · <span id="wzSalvato">${salvato?'Salvato':(doc.cliente.nome?'':'Non ancora salvato')}</span>${inizio?'':' · <u>cliente</u>'}</span></button>
       ${inizio?'':'<button type="button" class="wz-ghost-sm" data-a="nuovo">+ Nuovo</button>'}
     </div>
-    ${inizio?'':`<nav class="wz-steps">${passiLbl().map((p,i)=>`<button type="button" class="wz-st${i+1<wzStep?' fatto':''}${i+1===wzStep?' ora':''}" data-step="${i+1}"><i></i><span>${p}</span></button>`).join('')}</nav>`}
+    ${inizio?'':`<nav class="wz-steps">${passiLbl().map((p,i)=>`<button type="button" class="wz-st${i+1<wzStep?' fatto':''}${i+1===wzStep?' ora':''}" data-step="${i+1}"><i></i><span>${i+1} · ${p}</span></button>`).join('')}</nav>`}
     <div class="wz-screen">${wzSchermata()}</div>
-    ${inizio?'':`<div class="wz-cta"><div class="wz-cta-info">${wzCtaInfo()}</div>
-      <button type="button" class="wz-primary" data-a="avanti">${['Avanti: misure','Avanti: lavori','Avanti: preventivo','Crea il PDF'][wzStep-1]}</button></div>`}`;
+    ${inizio?'':`<div class="wz-cta">
+      <button type="button" class="wz-back" data-a="indietro" aria-label="Torna al passo prima">${indietro}</button>
+      <div class="wz-cta-info">${wzCtaInfo()}</div>
+      <button type="button" class="wz-primary" data-a="avanti">${['Avanti: lavori','Avanti: preventivo','Crea il PDF'][wzStep-1]}</button></div>`}`;
+  // spunte "in tutti i locali" a metà (solo alcune stanze)
+  root.querySelectorAll('[data-tutti][data-meta="1"]').forEach(c=>{ c.indeterminate=true; });
 }
 function wzCtaInfo(){
-  const n=doc.locali.length, mis=doc.locali.filter(locMisurato).length;
-  const conLav=doc.locali.filter(l=>locRighe(l,doc.prezzi).length).length, T=docTotali(doc);
+  const n=doc.locali.length, mis=doc.locali.filter(locMisurato).length, T=docTotali(doc);
   return [
-    `<b>${n} ${n===1?'locale':'locali'}</b>${doc.via==='disegno'?'dalla pianta':'nel preventivo'}`,
-    `<b>${mis} di ${n}</b>locali misurati`,
-    `<b>${prEur(T.sub)}</b>${conLav} di ${n} locali con lavori`,
+    `<b>${n} ${n===1?'locale':'locali'}</b>${mis} di ${n} misurati`,
+    `<b>${prEur(T.sub)}</b>lavori, IVA esclusa`,
     `<b>${prEur(T.tot)}</b>totale IVA inclusa`
   ][wzStep-1];
 }
@@ -358,58 +373,68 @@ function wzSchermata(){
     <button type="button" class="wz-pick" data-a="manuale">
       <span class="wz-ico">${icoElenco()}</span>
       <b>Senza disegno</b>
-      <span>Elenchi le stanze, poi misure e lavori stanza per stanza.</span>
+      <span>Scrivi le stanze e le loro misure in un elenco.</span>
     </button>`}`;
   const pianta=doc.via==='disegno';
   if(wzStep===1 && pianta){
-    const svg=svgPianta(doc,'pianta');
+    const svg=svgPianta(doc,'misure');
+    const daMis=doc.locali.filter(l=>!locMisurato(l)).length;
     return `
     <h2 class="wz-h2">La pianta</h2>
-    <p class="wz-lead">Disegna col dito: ogni stanza chiusa diventa un locale del preventivo. Nome e misure li metti anche lì, toccando la stanza.</p>
-    ${svg?`<div class="wz-plan" data-a="disegna">${svg}</div>`:`<button type="button" class="wz-plan wz-plan-vuota" data-a="disegna">${icoPianta()}<span>Foglio bianco: tocca per disegnare</span></button>`}
-    <button type="button" class="wz-primary wz-full" data-a="disegna">${svg?'Modifica la pianta':'Disegna la pianta'}</button>
+    <p class="wz-lead">${svg?(daMis?`Tocca le stanze in arancione per nome e misure (${daMis} da misurare).`:`Tutte le stanze hanno le misure${doc.pianta&&doc.pianta.inScala?' · pianta in scala':''}.`):'Disegna col dito: ogni stanza chiusa diventa un locale del preventivo.'}</p>
+    ${svg?`<div class="wz-plan">${svg}</div>`:`<button type="button" class="wz-plan wz-plan-vuota" data-a="disegna">${icoPianta()}<span>Foglio bianco: tocca per disegnare</span></button>`}
+    <button type="button" class="${svg?'wz-ghost wz-full':'wz-primary wz-full'}" data-a="disegna">${svg?'✏️ Modifica la pianta':'Disegna la pianta'}</button>
     <div class="wz-rows">${doc.locali.map(l=>{ const s=locSup(l); return `
       <div class="wz-editrow"><button type="button" class="wz-row" data-room="${l.id}">
         <span class="n">${esc(l.nome||'Senza nome')}</span>
-        <span class="d">${l.inPianta===false?'Non più nella pianta':(s?`${prF2(l.L)} × ${prF2(l.W)} m`:'Senza misure')}</span>
-        <span class="v">${s?`${prF1(s.pavimento)} m²`:''}</span>${chev}</button>
+        <span class="d">${l.inPianta===false?'Non più nella pianta':(s?`${prF2(l.L)} × ${prF2(l.W)} · h ${prF2(l.H)} · pareti ${prF1(s.pareti)} m²`:'Senza misure')}</span>
+        <span class="v">${s?`${prF1(s.pavimento)} m²`:'<span class="wz-pill todo">da misurare</span>'}</span>${chev}</button>
         ${l.inPianta===false||!l.daPianta?`<button type="button" class="wz-del" data-dellocale="${l.id}" aria-label="Elimina ${esc(l.nome)}">×</button>`:''}</div>`; }).join('')}</div>
     <button type="button" class="wz-add" data-a="addlocale">+ Locale fuori pianta (es. scale, esterno)</button>`;
   }
   if(wzStep===1) return `
-    <h2 class="wz-h2">Quali locali ci sono?</h2>
-    <p class="wz-lead">Tocca un nome per aggiungerlo, o scrivine uno tuo. Le misure le metti al passo dopo.</p>
+    <h2 class="wz-h2">Locali e misure</h2>
+    <p class="wz-lead">Tocca un nome per aggiungere il locale, poi scrivi le misure in metri. Il tasto "Avanti" della tastiera passa alla casella dopo.</p>
     <div class="wz-chips">${NOMI_LOCALI.map(n=>`<button type="button" class="wz-chip" data-addnome="${esc(n)}">+ ${esc(n)}</button>`).join('')}</div>
-    <div class="wz-rows">${doc.locali.map(l=>`
-      <div class="wz-editrow"><input class="wz-input" data-nome="${l.id}" value="${esc(l.nome)}" placeholder="Nome del locale" aria-label="Nome locale">
-        <button type="button" class="wz-del" data-dellocale="${l.id}" aria-label="Elimina ${esc(l.nome)}">×</button></div>`).join('')}
-      ${doc.locali.length?'':'<p class="wz-empty">Nessun locale ancora.</p>'}
+    <div class="wz-rows">${doc.locali.map(l=>{ const s=locSup(l); return `
+      <div class="wz-loc">
+        <div class="wz-editrow"><input class="wz-input wz-loc-n" data-nome="${l.id}" value="${esc(l.nome)}" placeholder="Nome del locale" aria-label="Nome locale" enterkeyhint="next">
+          <button type="button" class="wz-del" data-dellocale="${l.id}" aria-label="Elimina ${esc(l.nome)}">×</button></div>
+        <div class="wz-loc-m">
+          <label><span>Lungh.</span><input class="wz-input" inputmode="decimal" enterkeyhint="next" data-mis="L" data-id="${l.id}" value="${prIn(l.L)}" placeholder="4,20"></label>
+          <label><span>Largh.</span><input class="wz-input" inputmode="decimal" enterkeyhint="next" data-mis="W" data-id="${l.id}" value="${prIn(l.W)}" placeholder="3,60"></label>
+          <label><span>Altezza</span><input class="wz-input" inputmode="decimal" enterkeyhint="next" data-mis="H" data-id="${l.id}" value="${prIn(l.H||H_BASE)}"></label>
+          <b class="wz-loc-mq" data-mq="${l.id}">${s?prF1(s.pavimento)+' m²':'—'}</b>
+        </div>
+      </div>`; }).join('')}
+      ${doc.locali.length?'':'<p class="wz-empty">Nessun locale ancora: tocca un nome qui sopra.</p>'}
     </div>
     <button type="button" class="wz-add" data-a="addlocale">+ Altro locale</button>`;
   if(wzStep===2){
-    const mis=doc.locali.filter(locMisurato).length;
+    const n=doc.locali.length;
+    const comuni=LAVORI_STD.map(x=>{
+      const con=doc.locali.filter(l=>l.lav[x.id]), tutti=n && con.length===n, meta=con.length>0 && !tutti;
+      return `<label class="wz-lav${tutti?' on':''}">
+        <input type="checkbox" data-tutti="${x.id}" data-meta="${meta?1:0}"${tutti?' checked':''}>
+        <span class="ln-n">${x.nome}</span>
+        <span class="ln-q" data-tq="${x.id}">${wzQTutti(x)}</span>
+        <span class="ln-p"><input inputmode="decimal" data-prezzo="${x.id}" value="${prIn(prNum(doc.prezzi[x.id]))}" aria-label="Prezzo ${x.nome}"><small>${x.su==='corpo'?'€ a corpo':'€ al m²'}</small></span>
+      </label>`;
+    }).join('');
     return `
-    <h2 class="wz-h2">Misure dei locali</h2>
-    <p class="wz-lead">Tocca un locale${pianta?' (sulla pianta o nell\'elenco)':''} e scrivi lunghezza, larghezza e altezza. ${mis} di ${doc.locali.length} misurati${pianta&&doc.pianta&&doc.pianta.inScala?' · pianta in scala':''}.</p>
-    ${pianta&&haPianta(doc)?`<div class="wz-plan">${svgPianta(doc,'misure')}</div>`:''}
-    <div class="wz-rows">${doc.locali.map(l=>{ const s=locSup(l); return `
+    <h2 class="wz-h2">Lavori</h2>
+    <div class="wz-sec">In tutti i locali <small>spunta una volta, vale per ogni stanza</small></div>
+    <div class="wz-rows">${n?comuni:'<p class="wz-empty">Aggiungi prima i locali.</p>'}</div>
+    <div class="wz-sec">Stanza per stanza <small>impianti, infissi, extra o eccezioni</small></div>
+    ${pianta&&haPianta(doc)?`<div class="wz-plan">${svgPianta(doc,'lavori')}</div>`:''}
+    <div class="wz-rows">${doc.locali.map(l=>{ const t=locTot(l,doc.prezzi), dd=wzDiff(l); return `
       <button type="button" class="wz-row" data-room="${l.id}">
         <span class="n">${esc(l.nome||'Senza nome')}</span>
-        <span class="d">${s?`${prF2(l.L)} × ${prF2(l.W)} · h ${prF2(l.H)} · pareti ${prF1(s.pareti)} m²`:'Senza misure'}</span>
-        <span class="v">${s?`${prF1(s.pavimento)} m²`:'<span class="wz-pill todo">da misurare</span>'}</span>${chev}</button>`; }).join('')}
-      ${doc.locali.length?'':'<p class="wz-empty">Aggiungi prima i locali al passo 1.</p>'}</div>`;
+        <span class="d">${locMisurato(l)?(dd?esc(dd):'Solo i lavori comuni'):'<span class="wz-pill todo">senza misure</span>'}</span>
+        <span class="v">${t?prEur(t):'—'}</span>${chev}</button>`; }).join('')}</div>
+    ${pianta?'<button type="button" class="wz-ghost wz-full" data-a="torna-pianta">✏️ Modifica la pianta o le misure</button>':''}`;
   }
-  if(wzStep===3) return `
-    <h2 class="wz-h2">Lavori per locale</h2>
-    <p class="wz-lead">Tocca un locale: spunta i lavori più usati (la quantità arriva dalle misure), aggiungi impianti, infissi o lavorazioni scritte a mano.</p>
-    ${pianta&&haPianta(doc)?`<div class="wz-plan">${svgPianta(doc,'lavori')}</div>`:''}
-    <div class="wz-rows">${doc.locali.map(l=>{ const rr=locRighe(l,doc.prezzi); return `
-      <button type="button" class="wz-row" data-room="${l.id}">
-        <span class="n">${esc(l.nome||'Locale')}</span>
-        <span class="d">${rr.length?esc(rr.map(x=>x.inf?(TIPI_INF[x.inf.tipo]||TIPI_INF.finestra).lbl:x.nome).join(', ')):'Nessuna lavorazione'}</span>
-        <span class="v">${rr.length?prEur(locTot(l,doc.prezzi)):'<span class="wz-pill todo">da fare</span>'}</span>${chev}</button>`; }).join('')}
-      ${doc.locali.length?'':'<p class="wz-empty">Aggiungi prima i locali al passo 1.</p>'}</div>`;
-  // passo 4: riepilogo
+  // passo 3: riepilogo
   const T=docTotali(doc);
   const blocchi=doc.locali.map(l=>{
     const rr=locRighe(l,doc.prezzi); if(!rr.length) return '';
@@ -417,6 +442,7 @@ function wzSchermata(){
       <div class="wz-ln"><span>${esc(x.nome)}</span><span class="t">${prEur(x.tot)}</span>
       <span class="q">${esc(x.inf?'1 pz · '+x.nota:qtaTesto(x)+(x.nota?' · '+x.nota:''))}${(x.u!=='a corpo'&&!x.inf)?' × '+prEur(x.p):''}</span></div>`).join('')}</div>`;
   }).join('');
+  const STATI={bozza:'📝 Bozza', inviato:'📤 Inviato', accettato:'✅ Accettato', rifiutato:'❌ Rifiutato'};
   return `
     <h2 class="wz-h2">Il preventivo</h2>
     <div class="wz-sum">${blocchi||'<div class="wz-sum-room"><p class="wz-empty">Nessuna lavorazione ancora. Torna al passo Lavori.</p></div>'}</div>
@@ -426,24 +452,44 @@ function wzSchermata(){
       <div class="r"><label for="wzIva">IVA</label><select class="wz-mini" id="wzIva" data-doc="iva">${[22,10,4,0].map(v=>`<option value="${v}"${Number(doc.iva)===v?' selected':''}>${v}%${v===10?' ristrutturazione':''}</option>`).join('')}</select></div>
       <div class="r"><span>IVA</span><span id="wzIvaVal">${prEur(T.iva)}</span></div>
       <div class="r"><label for="wzVal">Validità</label><select class="wz-mini" id="wzVal" data-doc="validita">${[30,60,90].map(v=>`<option value="${v}"${doc.validita===v?' selected':''}>${v} giorni</option>`).join('')}</select></div>
+      <div class="r"><label for="wzStato">Stato</label><select class="wz-mini" id="wzStato" data-doc="stato">${Object.keys(STATI).map(k=>`<option value="${k}"${(doc.stato||'bozza')===k?' selected':''}>${STATI[k]}</option>`).join('')}</select></div>
       <div class="r big"><span>Totale</span><span id="wzTotVal">${prEur(T.tot)}</span></div>
     </div>
     ${String(doc.cliente.nome||'').trim()?'':'<p class="wz-warn">Manca il nome del cliente: tocca in alto per scriverlo.</p>'}`;
+}
+// Quantità complessiva di un lavoro comune (sui locali che lo hanno, o su tutti se nessuno).
+function wzQTutti(x){
+  if(x.su==='corpo'){ const k=doc.locali.filter(l=>l.lav[x.id]).length; return k?`a corpo · in ${k} ${k===1?'locale':'locali'}`:'a corpo, per locale'; }
+  const con=doc.locali.filter(l=>l.lav[x.id]), base=con.length?con:doc.locali;
+  const q=base.reduce((a,l)=>{ const s=locSup(l); return a+(s?s[x.su]:0); },0);
+  const senza=base.filter(l=>!locMisurato(l)).length;
+  return `${prF1(q)} ${SU_LBL[x.su]}${con.length&&con.length<doc.locali.length?` · in ${con.length} di ${doc.locali.length}`:''}${senza?` · ${senza} senza misure`:''}`;
+}
+// Cosa ha di diverso un locale rispetto ai lavori comuni.
+function wzDiff(l){
+  const piu=[], meno=[];
+  LAVORI_STD.forEach(x=>{ const c=!!doc.tutti.lav[x.id], on=!!l.lav[x.id]; if(on && !c) piu.push(x.nome); if(!on && c) meno.push(x.nome); });
+  IMPIANTI.forEach(k=>{ if(l.imp[k.id].on) piu.push(k.nome); });
+  l.inf.forEach(x=>{ if(!x.pid || prNum(x.prezzo)) piu.push((TIPI_INF[x.tipo]||TIPI_INF.finestra).lbl); });
+  l.man.forEach(x=>{ if(String(x.nome||'').trim()) piu.push(x.nome); });
+  return [piu.length?'+ '+piu.join(', '):'', meno.length?'senza '+meno.join(', ').toLowerCase():''].filter(Boolean).join(' · ');
 }
 function icoPianta(){ return `<svg width="44" height="34" viewBox="0 0 44 34" aria-hidden="true"><rect x="2" y="2" width="40" height="30" fill="#DBEAFE" stroke="#111827" stroke-width="2.4"/><path d="M22 2v30M2 17h20M22 14h20" fill="none" stroke="#111827" stroke-width="2.4"/></svg>`; }
 function icoElenco(){ return `<svg width="40" height="32" viewBox="0 0 40 32" aria-hidden="true">${[4,14,24].map(y=>`<rect x="2" y="${y}" width="6" height="5" rx="1.5" fill="#2563EB"/><rect x="12" y="${y}" width="26" height="5" rx="2.5" fill="#E4E7EC"/>`).join('')}</svg>`; }
 
 /* ── azioni della pagina ── */
 function wzVai(step){
-  wzStep=Math.max(1,Math.min(4,step)); wzRender();
+  wzStep=Math.max(0,Math.min(3,step)); wzRender();
   try{ window.scrollTo(0,0); }catch(e){}
+  if(wzStep===2 && !Store.loadListino()._ok) wzApriListino(true);
 }
 function wzAvanti(){
   if(wzStep===1 && !doc.locali.length){ wzToast(doc.via==='disegno'?'Disegna almeno una stanza chiusa':'Aggiungi almeno un locale'); return; }
-  if(wzStep===2){ const m=doc.locali.filter(l=>!locMisurato(l)).length; if(m) wzToast(`${m} ${m===1?'locale':'locali'} senza misure: puoi completarle dopo`); }
-  if(wzStep<4){ wzVai(wzStep+1); return; }
+  if(wzStep===1){ const m=doc.locali.filter(l=>!locMisurato(l)).length; if(m) wzToast(`${m} ${m===1?'locale':'locali'} senza misure: le metti anche dopo`); }
+  if(wzStep<3){ wzVai(wzStep+1); return; }
   wzPdf();
 }
+function wzIndietro(){ wzSalvaOra(); wzVai(wzStep-1); }
 function wzPdf(){
   if(!String(doc.cliente.nome||'').trim()){ wzToast('Manca il nome del cliente'); return; }
   wzSalvaOra();
@@ -456,25 +502,33 @@ function wzInizia(via){
 }
 function wzDisegna(){
   if(typeof Pianta==='undefined') return;
-  Pianta.apri(doc, { cambio:()=>wzSalva(), fine:()=>{ wzSalvaOra(); wzRender(); } });
+  const t=wzEl('wzToast'); if(t) t.style.display='none';
+  Pianta.apri(doc, { cambio:()=>wzSalva(), fine:()=>{
+    wzSalvaOra();
+    const pronta=doc.locali.length && doc.locali.every(l=>String(l.nome||'').trim() && locMisurato(l));
+    if(pronta && wzStep<2){ wzVai(2); wzToast('Pianta completa: ora scegli i lavori'); }
+    else wzRender();
+  } });
 }
 function wzAddLocale(nome){
   const id=doc.locali.length ? Math.max(...doc.locali.map(l=>l.id))+1 : 1;
   let n=nome||'Locale '+(doc.locali.length+1);
   if(nome){ const stessi=doc.locali.filter(l=>l.nome===nome || l.nome.startsWith(nome+' ')).length; if(stessi) n=nome+' '+(stessi+1); }
-  doc.locali.push(nuovoLocale(id, n)); wzSalva(); wzRender();
-  if(!nome){ const ins=document.querySelectorAll('[data-nome]'); const u=ins[ins.length-1]; if(u){ u.focus(); u.select && u.select(); } }
+  doc.locali.push(conLavoriComuni(nuovoLocale(id, n), doc)); wzSalva(); wzRender();
+  // si scrivono subito le misure (o il nome, se è un locale "libero")
+  const sel= nome ? `[data-mis="L"][data-id="${id}"]` : `[data-nome="${id}"]`;
+  const u=document.querySelector(sel); if(u){ u.focus(); if(!nome && u.select) u.select(); }
 }
 
 function wzClick(e){
   const t=e.target;
-  const st=t.closest('[data-step]'); if(st){ wzVai(+st.dataset.step); return; }
+  const st=t.closest('[data-step]'); if(st){ wzSalvaOra(); wzVai(+st.dataset.step); return; }
   const room=t.closest('[data-room]'); if(room){ wzApriScheda(+room.dataset.room); return; }
   const an=t.closest('[data-addnome]'); if(an){ wzAddLocale(an.dataset.addnome); return; }
   const dl=t.closest('[data-dellocale]');
   if(dl){
     const l=doc.locali.find(x=>x.id===+dl.dataset.dellocale);
-    const pieno=l && (locMisurato(l) || locRighe(l,doc.prezzi).length);
+    const pieno=l && (locMisurato(l) || l.man.length || l.inf.length || l.imp.el.on || l.imp.id.on);
     if(pieno && !confirm(`Eliminare "${l.nome}" con le sue misure e lavori?`)) return;
     doc.locali=doc.locali.filter(x=>x.id!==+dl.dataset.dellocale); wzSalva(); wzRender(); return;
   }
@@ -483,9 +537,11 @@ function wzClick(e){
   if(act==='manuale') wzInizia('manuale');
   else if(act==='disegno') wzInizia('disegno');
   else if(act==='disegna') wzDisegna();
+  else if(act==='torna-pianta') wzVai(1);
   else if(act==='avanti') wzAvanti();
+  else if(act==='indietro') wzIndietro();
   else if(act==='addlocale') wzAddLocale();
-  else if(act==='cliente'){ if(wzStep){ wzStep=0; wzRender(); const n=wzEl('wzNome'); if(n) n.focus(); } }
+  else if(act==='cliente'){ if(wzStep){ wzSalvaOra(); wzStep=0; wzRender(); const n=wzEl('wzNome'); if(n) n.focus(); } }
   else if(act==='continua') wzInizia(doc.via||'manuale');
   else if(act==='nuovo'){ wzSalvaOra(); wzNuovo(); try{ window.scrollTo(0,0); }catch(e2){} }
 }
@@ -497,7 +553,27 @@ function wzInput(e){
     wzSalva(); return;
   }
   if(d.nome){ const l=doc.locali.find(x=>x.id===+d.nome); if(l){ l.nome=t.value; wzSalva(); } return; }
+  if(d.mis){
+    const l=doc.locali.find(x=>x.id===+d.id); if(!l) return;
+    l[d.mis]= d.mis==='H' ? (prNum(t.value)||H_BASE) : prNum(t.value);
+    const s=locSup(l), mq=document.querySelector(`[data-mq="${l.id}"]`); if(mq) mq.textContent= s?prF1(s.pavimento)+' m²':'—';
+    const ci=document.querySelector('.wz-cta-info'); if(ci) ci.innerHTML=wzCtaInfo();
+    wzSalva(); return;
+  }
+  if(d.prezzo){
+    wzSetPrezzo(d.prezzo, prNum(t.value));
+    const x=LAVORI_STD.find(v=>v.id===d.prezzo), q=document.querySelector(`[data-tq="${d.prezzo}"]`); if(x && q) q.textContent=wzQTutti(x);
+    const ci=document.querySelector('.wz-cta-info'); if(ci) ci.innerHTML=wzCtaInfo();
+    wzSalva(); return;
+  }
   if(d.doc==='sconto'){ doc.sconto=Math.min(100,prNum(t.value)); wzAggTotali(); wzSalva(); }
+}
+// Tasto "Avanti" della tastiera: alla casella successiva.
+function wzKeydown(e){
+  if(e.key!=='Enter' || !e.target.matches || !e.target.matches('.wz-loc input')) return;
+  e.preventDefault();
+  const tutti=[...document.querySelectorAll('.wz-loc input')], i=tutti.indexOf(e.target);
+  if(i>=0 && i<tutti.length-1) tutti[i+1].focus(); else e.target.blur();
 }
 // Aggiorna i totali sul posto (un ridisegno completo mangerebbe il tocco su "Crea il PDF").
 function wzAggTotali(){
@@ -507,38 +583,64 @@ function wzAggTotali(){
   const ci=document.querySelector('.wz-cta-info'); if(ci) ci.innerHTML=wzCtaInfo();
 }
 function wzChange(e){
-  const d=e.target.dataset;
-  if(d.doc==='iva'){ doc.iva=parseFloat(e.target.value)||0; wzAggTotali(); wzSalva(); }
-  else if(d.doc==='validita'){ doc.validita=parseInt(e.target.value,10)||30; wzSalva(); }
+  const t=e.target, d=t.dataset;
+  if(d.tutti){
+    const id=d.tutti, on=t.checked;
+    doc.locali.forEach(l=>{ l.lav[id]=on; });
+    if(on) doc.tutti.lav[id]=true; else delete doc.tutti.lav[id];
+    wzSalva(); wzRender(); return;
+  }
+  if(d.doc==='iva'){ doc.iva=parseFloat(t.value)||0; wzAggTotali(); wzSalva(); }
+  else if(d.doc==='validita'){ doc.validita=parseInt(t.value,10)||30; wzSalva(); }
+  else if(d.doc==='stato'){ doc.stato=t.value; wzSalva(); }
+}
+
+/* ── misure: la pianta si mette in scala quando tutte le stanze le hanno ── */
+function wzDopoMisure(l, cambiate){
+  if(!(doc.via==='disegno' && haPianta(doc) && l.inPianta && typeof Pianta!=='undefined')) return null;
+  if(cambiate) doc.pianta.inScala=false;
+  const daMisurare=doc.locali.filter(x=>x.inPianta && !locMisurato(x)).length;
+  if(daMisurare || doc.pianta.inScala) return null;
+  const r=Pianta.scala(doc);
+  if(r.esito!=='ok') return null;
+  return r.avvisi.length ? 'Pianta in scala, ma alcune misure non tornano: controllale nel disegno' : 'Tutte le misure ci sono: pianta messa in scala';
 }
 
 /* ── scheda di un locale (misure o lavori) ── */
 function wzLoc(){ return doc && doc.locali.find(x=>x.id===wzSel); }
 function wzApriScheda(id){
   wzSel=id; const l=wzLoc(); if(!l) return;
-  if(wzStep===3) wzDisegnaLavori(); else wzDisegnaMisure();
+  _wzMisPrima=[l.L,l.W,l.H].join('|');
+  if(wzStep===2) wzDisegnaLavori(); else wzDisegnaMisure();
   wzEl('wzSheetBg').style.display='flex';
   document.body.style.overflow='hidden';
 }
 function wzChiudiScheda(silenzioso){
   const bg=wzEl('wzSheetBg'); if(bg) bg.style.display='none';
   document.body.style.overflow='';
-  wzSel=null;
-  if(!silenzioso) wzRender();
+  const l=wzLoc(); let msg=null;
+  // misure cambiate dalla scheda lavori: stesso controllo della scheda misure
+  if(l && wzStep===2 && _wzMisPrima!==null && _wzMisPrima!==[l.L,l.W,l.H].join('|')) msg=wzDopoMisure(l, true);
+  wzSel=null; _wzMisPrima=null;
+  if(!silenzioso){ wzRender(); if(msg) wzToast(msg); }
 }
 function wzKv(s){
   return s ? `<div><span>Pavimento</span><b>${prF2(s.pavimento)} m²</b></div><div><span>Pareti${s.ded>0?' nette':''}</span><b>${prF2(s.pareti)} m²</b></div><div><span>Soffitto</span><b>${prF2(s.soffitto)} m²</b></div>`
            : `<div class="warn" style="grid-column:1/-1"><span>Superfici</span><b>Compaiono appena inserisci lunghezza e larghezza</b></div>`;
 }
+function wzDims(l, pre){
+  return `<div class="wz-dims">
+      <label class="wz-field"><span class="wz-lbl">Lungh.${l.inPianta?' ↔':''} m</span><input class="wz-input" id="${pre}L" data-smis="L" inputmode="decimal" value="${prIn(l.L)}" placeholder="4,20"></label>
+      <label class="wz-field"><span class="wz-lbl">Largh.${l.inPianta?' ↕':''} m</span><input class="wz-input" id="${pre}W" data-smis="W" inputmode="decimal" value="${prIn(l.W)}" placeholder="3,60"></label>
+      <label class="wz-field"><span class="wz-lbl">Altezza m</span><input class="wz-input" id="${pre}H" data-smis="H" inputmode="decimal" value="${prIn(l.H||H_BASE)}"></label>
+    </div>`;
+}
 function wzDisegnaMisure(){
   const l=wzLoc();
   wzEl('wzSheet').innerHTML=`
-    <div class="wz-sh-head"><input class="wz-sh-title" data-sh-nome value="${esc(l.nome)}" aria-label="Nome del locale"><button type="button" class="wz-x" data-sh="close" aria-label="Chiudi">×</button></div>
-    <div class="wz-dims">
-      <label class="wz-field"><span class="wz-lbl">Lungh.${l.inPianta?' ↔':''} m</span><input class="wz-input" id="mL" inputmode="decimal" value="${prIn(l.L)}" placeholder="4,20"></label>
-      <label class="wz-field"><span class="wz-lbl">Largh.${l.inPianta?' ↕':''} m</span><input class="wz-input" id="mW" inputmode="decimal" value="${prIn(l.W)}" placeholder="3,60"></label>
-      <label class="wz-field"><span class="wz-lbl">Altezza m</span><input class="wz-input" id="mH" inputmode="decimal" value="${prIn(l.H||H_BASE)}"></label>
-    </div>
+    <div class="wz-sh-head"><input class="wz-sh-title" data-sh-nome value="${esc(l.nome)}" placeholder="Nome della stanza" aria-label="Nome del locale"><button type="button" class="wz-x" data-sh="close" aria-label="Chiudi">×</button></div>
+    <div class="wz-chips">${NOMI_LOCALI.slice(0,8).map(n=>`<button type="button" class="wz-chip${l.nome===n?' on':''}" data-sh="nome" data-n="${esc(n)}">${esc(n)}</button>`).join('')}</div>
+    ${wzDims(l,'m')}
     <div class="wz-kv" id="mKv">${wzKv(locSup(l))}</div>
     <div class="wz-sh-foot"><button type="button" class="wz-ghost" data-sh="close">Annulla</button><button type="button" class="wz-primary" data-sh="salva-mis">Salva misure</button></div>`;
 }
@@ -550,14 +652,15 @@ function wzDisegnaLavori(){
   const l=wzLoc(), s=locSup(l);
   const opt=(o,v)=>Object.keys(o).map(k=>`<option value="${k}"${k===v?' selected':''}>${typeof o[k]==='string'?o[k]:o[k].lbl}</option>`).join('');
   wzEl('wzSheet').innerHTML=`
-    <div class="wz-sh-head"><h3>${esc(l.nome||'Locale')}</h3><button type="button" class="wz-x" data-sh="close" aria-label="Chiudi">×</button></div>
+    <div class="wz-sh-head"><h3>${esc(l.nome||'Senza nome')}</h3><button type="button" class="wz-x" data-sh="close" aria-label="Chiudi">×</button></div>
+    ${wzDims(l,'s')}
     <div class="wz-kv" id="lavKv">${wzKv(s)}</div>
 
-    <div class="wz-sec">Lavori più usati <small>prezzo al m²</small></div>
-    <div class="wz-rows">${LAVORI_STD.map(x=>{ const on=!!l.lav[x.id]; return `
+    <div class="wz-sec">Lavori più usati <small>quelli "in tutti" sono già spuntati</small></div>
+    <div class="wz-rows">${LAVORI_STD.map(x=>{ const on=!!l.lav[x.id], com=!!doc.tutti.lav[x.id]; return `
       <label class="wz-lav${on?' on':''}">
         <input type="checkbox" data-lav="${x.id}"${on?' checked':''}>
-        <span class="ln-n">${x.nome}</span>
+        <span class="ln-n">${x.nome}${com?` <em class="wz-com">${on?'in tutti':'tolto qui'}</em>`:''}</span>
         <span class="ln-q${(!s&&x.su!=='corpo')?' warn':''}" data-q="${x.id}">${wzQLav(l,x)}</span>
         <span class="ln-p"><input inputmode="decimal" data-prezzo="${x.id}" value="${prIn(prNum(doc.prezzi[x.id]))}" aria-label="Prezzo ${x.nome}"><small>${x.su==='corpo'?'€ a corpo':'€ al m²'}</small></span>
       </label>`; }).join('')}</div>
@@ -602,7 +705,7 @@ function wzDisegnaLavori(){
     <div class="wz-sec">Note del locale <small>vanno nel PDF</small></div>
     <textarea class="wz-input wz-note" data-note rows="2" placeholder="Es. pareti con umidità, piastrelle scelte dal cliente…">${esc(l.note||'')}</textarea>
 
-    <div class="wz-sh-foot"><button type="button" class="wz-ghost" data-sh="copia">Copia su tutti i locali</button><b id="lavTot">Totale locale ${prEur(locTot(l,doc.prezzi))}</b></div>
+    <div class="wz-sh-foot"><span></span><b id="lavTot">Totale locale ${prEur(locTot(l,doc.prezzi))}</b></div>
     <button type="button" class="wz-primary wz-full" data-sh="close">Fatto</button>`;
 }
 function wzAggLavori(){
@@ -612,15 +715,50 @@ function wzAggLavori(){
   l.inf.forEach((x,i)=>{ const el=document.querySelector(`[data-dw="${i}"]`); if(el) el.innerHTML=disegnoInfisso(x,96,110); });
   const t=wzEl('lavTot'); if(t) t.textContent='Totale locale '+prEur(locTot(l,doc.prezzi));
 }
+
+/* ── listino: i prezzi dell'impresa, chiesti una volta sola ── */
+let _wzListino=false;
+function wzApriListino(primaVolta){
+  const lst=prezziListino();
+  _wzListino=true; wzSel=null;
+  wzEl('wzSheet').innerHTML=`
+    <div class="wz-sh-head"><h3>I tuoi prezzi</h3><button type="button" class="wz-x" data-sh="close-listino" aria-label="Chiudi">×</button></div>
+    <p class="wz-lead">${primaVolta?'Prima di iniziare: controlla i prezzi dei lavori più usati. Li ritrovi in ogni preventivo e puoi sempre cambiarli.':'Prezzi proposti nei nuovi preventivi. Si aggiornano anche quando li cambi dentro un preventivo.'}</p>
+    <div class="wz-rows">${LAVORI_STD.map(x=>`
+      <label class="wz-lav on wz-lst">
+        <span class="ln-n">${x.nome}</span>
+        <span class="ln-q">${x.su==='corpo'?'a corpo, per locale':SU_LBL[x.su]}</span>
+        <span class="ln-p"><input inputmode="decimal" data-lst="${x.id}" value="${prIn(prNum(lst[x.id]))}" aria-label="Prezzo ${x.nome}"><small>${x.su==='corpo'?'€ a corpo':'€ al m²'}</small></span>
+      </label>`).join('')}</div>
+    <button type="button" class="wz-primary wz-full" data-sh="salva-listino">Salva i miei prezzi</button>`;
+  wzEl('wzSheetBg').style.display='flex';
+  document.body.style.overflow='hidden';
+}
+function wzSalvaListino(){
+  const l=Store.loadListino();
+  document.querySelectorAll('[data-lst]').forEach(inp=>{
+    const v=prNum(inp.value); l[inp.dataset.lst]=v;
+    if(doc && !preventivi.some(p=>String(p.id)===String(doc.id) && p.stato!=='bozza')) doc.prezzi[inp.dataset.lst]=v;
+  });
+  l._ok=1; Store.saveListino(l);
+  _wzListino=false; wzChiudiScheda(true);
+  if(doc && wzStep) { wzSalva(); wzRender(); }
+  wzToast('Prezzi salvati');
+}
+
+/* ── eventi della scheda ── */
 function wzSheetInput(e){
-  const l=wzLoc(); if(!l) return;
   const t=e.target, d=t.dataset;
-  if(t.id==='mL'||t.id==='mW'||t.id==='mH'){
-    const kv=wzEl('mKv'); if(kv) kv.innerHTML=wzKv(locSup({L:prNum(wzEl('mL').value), W:prNum(wzEl('mW').value), H:prNum(wzEl('mH').value)||H_BASE, inf:l.inf}));
-    return;
+  if(d.lst) return;
+  const l=wzLoc(); if(!l) return;
+  if(d.smis){
+    const pre=t.id.charAt(0);
+    const nuovo={L:prNum(wzEl(pre+'L').value), W:prNum(wzEl(pre+'W').value), H:prNum(wzEl(pre+'H').value)||H_BASE};
+    if(pre==='m'){ const kv=wzEl('mKv'); if(kv) kv.innerHTML=wzKv(locSup(Object.assign({}, l, nuovo))); return; }
+    Object.assign(l, nuovo); wzAggLavori(); wzSalva(); return;   // scheda lavori: le misure valgono subito
   }
   if(d.shNome!==undefined){ l.nome=t.value; wzSalva(); return; }
-  if(d.prezzo){ doc.prezzi[d.prezzo]=prNum(t.value); wzAggiornaListino(d.prezzo, doc.prezzi[d.prezzo]); }
+  if(d.prezzo) wzSetPrezzo(d.prezzo, prNum(t.value));
   else if(d.impP) l.imp[d.impP].p=prNum(t.value);
   else if(d.impN) l.imp[d.impN].nota=t.value;
   else if(d.inf!==undefined && t.tagName==='INPUT') l.inf[+d.inf][d.k]= d.k==='prezzo' ? prNum(t.value) : (parseInt(t.value,10)||0);
@@ -630,7 +768,7 @@ function wzSheetInput(e){
   wzAggLavori(); wzSalva();
 }
 function wzSheetChange(e){
-  const l=wzLoc(); if(!l || wzStep!==3) return;
+  const l=wzLoc(); if(!l || wzStep!==2) return;
   const t=e.target, d=t.dataset;
   if(d.lav) l.lav[d.lav]=t.checked;
   else if(d.imp) l.imp[d.imp].on=t.checked;
@@ -645,23 +783,21 @@ function wzSheetChange(e){
 }
 function wzSheetClick(e){
   const a=e.target.closest('[data-sh]'); if(!a) return;
-  const l=wzLoc(), act=a.dataset.sh;
+  const act=a.dataset.sh;
+  if(act==='salva-listino') return wzSalvaListino();
+  if(act==='close-listino'){ const l=Store.loadListino(); l._ok=1; Store.saveListino(l); _wzListino=false; return wzChiudiScheda(true); }
   if(act==='close') return wzChiudiScheda();
-  if(!l) return;
+  const l=wzLoc(); if(!l) return;
+  if(act==='nome'){
+    l.nome=a.dataset.n; const ti=document.querySelector('.wz-sh-title'); if(ti) ti.value=l.nome;
+    document.querySelectorAll('.wz-sheet .wz-chip').forEach(c=>c.classList.toggle('on', c===a));
+    wzSalva(); const L=wzEl('mL'); if(L && !L.value) L.focus(); return;
+  }
   if(act==='salva-mis'){
     const nL=prNum(wzEl('mL').value), nW=prNum(wzEl('mW').value), cambiate= nL!==l.L || nW!==l.W;
     l.L=nL; l.W=nW; l.H=prNum(wzEl('mH').value)||H_BASE;
-    let msg=null;
-    // pianta: quando tutte le stanze hanno le misure, si mette in scala da sola
-    if(doc.via==='disegno' && haPianta(doc) && l.inPianta && typeof Pianta!=='undefined'){
-      if(cambiate) doc.pianta.inScala=false;
-      const daMisurare=doc.locali.filter(x=>x.inPianta && !locMisurato(x)).length;
-      if(!daMisurare && !doc.pianta.inScala){
-        const r=Pianta.scala(doc);
-        if(r.esito==='ok') msg= r.avvisi.length ? 'Pianta in scala, ma alcune misure non tornano: controllale nel disegno' : 'Tutte le misure ci sono: pianta messa in scala';
-      }
-    }
-    wzSalva(); wzChiudiScheda();
+    const msg=wzDopoMisure(l, cambiate);
+    _wzMisPrima=null; wzSalva(); wzChiudiScheda();
     const restano=doc.locali.filter(x=>!locMisurato(x)).length;
     wzToast(msg || (locMisurato(l) ? (restano?`Misure salvate · ${restano} da misurare`:'Tutti i locali sono misurati') : 'Mancano lunghezza e larghezza'));
     return;
@@ -673,15 +809,6 @@ function wzSheetClick(e){
     const ins=document.querySelectorAll('.wz-man .nm'); const u=ins[ins.length-1]; if(u) u.focus(); return;
   }
   if(act==='del-man'){ l.man.splice(+a.dataset.i,1); wzSalva(); wzDisegnaLavori(); return; }
-  if(act==='copia'){
-    doc.locali.forEach(x=>{
-      if(x===l) return;
-      x.lav=Object.assign({}, l.lav);
-      x.imp=JSON.parse(JSON.stringify(l.imp));
-      x.man=l.man.filter(m=>String(m.nome||'').trim()).map(m=>Object.assign({}, m));
-    });
-    wzSalva(); wzChiudiScheda(); wzToast('Lavori e impianti copiati su tutti i locali (gli infissi no)');
-  }
 }
 
 /* ── collegamento agli eventi (una volta sola) ── */
@@ -691,7 +818,8 @@ function wzInit(){
   root.addEventListener('click', wzClick);
   root.addEventListener('input', wzInput);
   root.addEventListener('change', wzChange);
+  root.addEventListener('keydown', wzKeydown);
   if(sh){ sh.addEventListener('click', wzSheetClick); sh.addEventListener('input', wzSheetInput); sh.addEventListener('change', wzSheetChange); }
-  if(bg) bg.addEventListener('click', e=>{ if(e.target===bg) wzChiudiScheda(); });
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && bg && bg.style.display==='flex') wzChiudiScheda(); });
+  if(bg) bg.addEventListener('click', e=>{ if(e.target===bg){ if(_wzListino) wzSheetClick({target:{closest:()=>({dataset:{sh:'close-listino'}})}}); else wzChiudiScheda(); } });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && bg && bg.style.display==='flex'){ if(_wzListino) wzSalvaListino(); else wzChiudiScheda(); } });
 }
