@@ -685,7 +685,7 @@ function inviaPDF(){
     box.appendChild(foglio); document.body.appendChild(box);
     const yPrima=window.scrollY||0; try{ window.scrollTo(0,0); }catch(e){}
     const rimetti=()=>{ try{ window.scrollTo(0,yPrima); }catch(e){} };
-    return html2pdf().set({
+    return svgInImmagini(foglio).then(()=>html2pdf().set({
       margin:[12,12,14,12], filename:nome,
       image:{type:'jpeg', quality:0.95},
       // scrollX/scrollY a 0: con la pagina scorsa, la "foto" partiva più in basso
@@ -693,7 +693,7 @@ function inviaPDF(){
       html2canvas:{scale:2, backgroundColor:'#ffffff', scrollX:0, scrollY:0},
       jsPDF:{unit:'mm', format:'a4', orientation:'portrait'},
       pagebreak:{mode:['css','legacy'], avoid:['tr','.no-break','.firme']}
-    }).from(foglio).outputPdf('blob').then(blob=>{
+    }).from(foglio).outputPdf('blob')).then(blob=>{
       box.remove(); rimetti();
       _pdfPronto=new File([blob], nome, {type:'application/pdf'});
       fine('📤 Condividi');
@@ -703,6 +703,32 @@ function inviaPDF(){
     fine('📤 Invia');
     alert('Per creare il PDF da inviare serve internet.\nIn alternativa: Stampa → Salva come PDF.');
   });
+}
+
+// I disegni (pianta, infissi) diventano immagini della misura esatta prima della
+// "foto" del foglio: su iPhone html2canvas disegnava gli SVG piccoli e fuori posto.
+function svgInImmagini(radice){
+  const svgs=[...radice.querySelectorAll('svg')];
+  return Promise.all(svgs.map(svg=>new Promise(ok=>{
+    const r=svg.getBoundingClientRect(), w=Math.max(1,Math.round(r.width)), h=Math.max(1,Math.round(r.height));
+    const clone=svg.cloneNode(true);
+    clone.setAttribute('width', w); clone.setAttribute('height', h);
+    clone.setAttribute('xmlns','http://www.w3.org/2000/svg'); clone.removeAttribute('style');
+    const img=new Image();
+    img.onload=()=>{
+      try{
+        const c=document.createElement('canvas'), k=3;
+        c.width=w*k; c.height=h*k;
+        const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,c.width,c.height); g.drawImage(img,0,0,c.width,c.height);
+        const out=new Image(); out.src=c.toDataURL('image/png');
+        out.style.cssText=`display:block;width:${w}px;height:${h}px;margin:${svg.style.margin||'0'}`;
+        out.onload=()=>{ svg.replaceWith(out); ok(); };
+        out.onerror=()=>ok();
+      }catch(e){ ok(); }
+    };
+    img.onerror=()=>ok();
+    img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(clone));
+  })));
 }
 
 // Stampa / salva PDF tramite iframe isolato: il documento dell'app NON viene

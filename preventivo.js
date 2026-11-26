@@ -180,10 +180,11 @@ function svgPianta(d, fase){
   const vbA=[x0-pad,y0-pad,(x1-x0)+2*pad,(y1-y0)+2*pad].map(v=>+v.toFixed(1)), vb=vbA.join(' ');
   // misura in pixel esplicita: senza, chi trasforma la pagina in PDF (html2canvas)
   // può prendere la pianta a dimensione "naturale" e mostrarne solo un angolo
-  const pxW=600, pxH=Math.max(60, Math.round(pxW*vbA[3]/vbA[2]));
+  let pxW=600, pxH=Math.max(60, Math.round(pxW*vbA[3]/vbA[2]));
+  if(pdf){ const k=Math.min(440/vbA[2], 230/vbA[3]); pxW=Math.round(vbA[2]*k); pxH=Math.round(vbA[3]*k); }
   const sw=S/170, fs0=S/24;
   const locs=new Map((d.locali||[]).map(l=>[l.id,l]));
-  let out=`<svg viewBox="${vb}" width="${pxW}" height="${pxH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pianta dei locali" style="display:block;width:100%;height:auto;max-height:${pdf?'260px':'320px'}">`;
+  let out=`<svg viewBox="${vb}" width="${pxW}" height="${pxH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pianta dei locali" style="${pdf?'display:block;max-width:100%;height:auto':'display:block;width:100%;height:auto;max-height:320px'}">`;
   (a.stanze||[]).forEach(st=>{
     const l=locs.get(st.locId);
     const s=l?locSup(l):null;
@@ -226,8 +227,8 @@ const haPianta=d=>!!(d && d.pianta && d.pianta.anteprima && d.pianta.anteprima.m
 function buildPdfPrev(d){
   d=normalizzaDoc(JSON.parse(JSON.stringify(d)));
   const T=docTotali(d), c=d.cliente;
-  const th='background:#111827;color:#fff;text-align:left;font-size:10.5px;padding:6px 7px';
-  const td='padding:6px 7px;border-bottom:1px solid #E5E7EB;vertical-align:middle';
+  const th='background:#111827;color:#fff;text-align:left;font-size:10.5px;padding:5px 7px';
+  const td='padding:4px 7px;border-bottom:1px solid #E5E7EB;vertical-align:middle';
   const r='text-align:right;white-space:nowrap';
   const corpo=d.locali.map(l=>{
     const rr=locRighe(l,d.prezzi);
@@ -243,39 +244,41 @@ function buildPdfPrev(d){
       `<td style="${td};${r}">${prEur(x.p)}</td><td style="${td}"></td>`+
       `<td style="${td};${r}">${prEur(x.tot)}</td></tr>`).join('');
     const note=String(l.note||'').trim() ? `<tr><td colspan="5" style="${td};color:#374151;font-style:italic">Note: ${esc(l.note)}</td></tr>` : '';
-    return testa+righe+note;
+    return `<tbody class="no-break">${testa}${righe}${note}</tbody>`;   // un locale non si spezza tra due pagine
   }).join('');
   const indir=[c.indirizzo, c.tel, c.email].filter(Boolean).map(esc).join(' · ');
   return `
-  <div style="display:flex;justify-content:space-between;gap:16px;padding-bottom:12px;border-bottom:2px solid #111827">
+  <div style="display:flex;justify-content:space-between;gap:16px;padding-bottom:10px;border-bottom:2px solid #111827">
     ${intestazionePDF('preventivo')}
     <div style="text-align:right;font-size:11px;color:#6B7280;white-space:nowrap">
       <div style="font-size:14px;font-weight:800;color:#111827">${esc(numDoc(d.numero))}</div>
       <div>${esc(d.data||'')}</div><div>Valido ${d.validita} giorni</div>
     </div>
   </div>
-  <div style="background:#F3F4F6;border-radius:8px;padding:10px 12px;margin:14px 0">
+  <div style="background:#F3F4F6;border-radius:8px;padding:8px 12px;margin:12px 0">
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#6B7280">Cliente</div>
     <div style="font-size:15px;font-weight:700">${esc(c.nome||'')}</div>
     ${indir?`<div style="font-size:11.5px;color:#374151">${indir}</div>`:''}
   </div>
-  ${haPianta(d)?`<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#6B7280;margin:14px 0 6px">Pianta dei locali${d.pianta.inScala?'':' (schizzo non in scala)'}</div>
-  <div class="no-break" style="border:1px solid #E5E7EB;border-radius:6px;padding:8px;max-width:440px;margin:0 auto">${svgPianta(d,'pdf')}</div>`:''}
-  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#6B7280;margin:14px 0 6px">Dettaglio lavori per locale</div>
+  ${haPianta(d)?`<div class="no-break"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#6B7280;margin:12px 0 6px">Pianta dei locali${d.pianta.inScala?'':' (schizzo non in scala)'}</div>
+  <div style="text-align:center"><div style="display:inline-block;border:1px solid #E5E7EB;border-radius:6px;padding:8px;max-width:100%">${svgPianta(d,'pdf')}</div></div></div>`:''}
+  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#6B7280;margin:12px 0 6px">Dettaglio lavori per locale</div>
   <table style="width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums">
     <thead><tr><th style="${th}">Lavorazione</th><th style="${th};${r}">Quantità</th><th style="${th};${r}">Prezzo</th><th style="${th};width:4px"></th><th style="${th};${r}">Importo</th></tr></thead>
-    <tbody>${corpo || `<tr><td colspan="5" style="${td}">Nessuna lavorazione inserita.</td></tr>`}</tbody>
+    ${corpo || `<tbody><tr><td colspan="5" style="${td}">Nessuna lavorazione inserita.</td></tr></tbody>`}
   </table>
-  <div class="no-break" style="margin:14px 0 0 auto;width:min(270px,100%);font-size:12.5px;font-variant-numeric:tabular-nums">
+  <div class="no-break firme" style="padding-top:12px">
+  <div style="margin:0 0 0 auto;width:min(270px,100%);font-size:12.5px;font-variant-numeric:tabular-nums">
     <div style="display:flex;justify-content:space-between;padding:3px 0"><span>Subtotale</span><span>${prEur(T.sub)}</span></div>
     ${T.sc>0?`<div style="display:flex;justify-content:space-between;padding:3px 0"><span>Sconto ${prF2(d.sconto).replace(/,00$/,'')}%</span><span>− ${prEur(T.sc)}</span></div>
     <div style="display:flex;justify-content:space-between;padding:3px 0"><span>Imponibile</span><span>${prEur(T.imp)}</span></div>`:''}
     <div style="display:flex;justify-content:space-between;padding:3px 0"><span>IVA ${d.iva}%</span><span>${prEur(T.iva)}</span></div>
     <div style="display:flex;justify-content:space-between;padding:7px 0 0;margin-top:4px;border-top:2px solid #111827;font-size:16px;font-weight:800"><span>Totale</span><span>${prEur(T.tot)}</span></div>
   </div>
-  <div class="firme" style="display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:40px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:34px">
     <div style="border-top:1px solid #111827;padding-top:4px;text-align:center;color:#6B7280;font-size:10.5px">Firma cliente per accettazione</div>
     <div style="border-top:1px solid #111827;padding-top:4px;text-align:center;color:#6B7280;font-size:10.5px">Firma impresa</div>
+  </div>
   </div>`;
 }
 
