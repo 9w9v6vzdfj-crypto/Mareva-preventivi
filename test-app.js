@@ -398,5 +398,30 @@ try {
   check('Coerenza delle misure con il disegno (tolleranza 0,5 m)', ok, JSON.stringify({ troppo, tolleranza, giusta, seconda, secondaOk, dubbio }));
 } catch (e) { check('Coerenza delle misure con il disegno (tolleranza 0,5 m)', false, e.message); }
 
+// 19) Codine oltre gli angoli: tolte; spallette dei vani porta: lasciate.
+try {
+  const sb = loadApp({});
+  boot(sb);
+  const W = (x1, y1, x2, y2) => ({ x1, y1, x2, y2 });
+  // rettangolo 0..240 × 0..240, il muro in alto va oltre l'angolo destro di 24 (2 quadretti)
+  const conCoda = [W(0,0,264,0), W(0,240,240,240), W(0,0,0,240), W(240,0,240,240)];
+  const r1 = JSON.parse(run(sb, 'JSON.stringify(Pianta._tagliaCode(' + JSON.stringify(conCoda) + ', 36))'));
+  const codaTolta = r1.length === 4 && !r1.some(w => w.x2 === 264);
+  // spalletta: pezzo di traverso che parte da un muro (vano porta): resta
+  const spalletta = [W(0,0,240,0), W(0,240,240,240), W(0,0,0,240), W(240,0,240,240), W(120,0,120,24)];
+  const r2 = JSON.parse(run(sb, 'JSON.stringify(Pianta._tagliaCode(' + JSON.stringify(spalletta) + ', 36))'));
+  const spallettaResta = r2.some(w => w.x1 === 120 && w.y2 === 24);
+  // coda lunga (oltre la soglia): resta, è un muro voluto
+  const lunga = [W(0,0,340,0), W(0,240,240,240), W(0,0,0,240), W(240,0,240,240)];
+  const r3 = JSON.parse(run(sb, 'JSON.stringify(Pianta._tagliaCode(' + JSON.stringify(lunga) + ', 36))'));
+  const lungaResta = r3.some(w => w.x2 === 340);
+  // angolo a "#": entrambi i muri vanno oltre
+  const doppia = [W(0,0,264,0), W(0,240,240,240), W(0,0,0,240), W(240,-24,240,240)];
+  const r4 = JSON.parse(run(sb, 'JSON.stringify(Pianta._tagliaCode(' + JSON.stringify(doppia) + ', 36))'));
+  const doppiaTolta = !r4.some(w => w.x2 === 264) && !r4.some(w => w.y1 === -24);
+  check('Codine oltre gli angoli tolte, spallette e muri lunghi lasciati', codaTolta && spallettaResta && lungaResta && doppiaTolta,
+    JSON.stringify({ codaTolta, spallettaResta, lungaResta, doppiaTolta }));
+} catch (e) { check('Codine oltre gli angoli tolte, spallette e muri lunghi lasciati', false, e.message); }
+
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);
