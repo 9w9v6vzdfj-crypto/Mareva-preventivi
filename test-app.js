@@ -361,11 +361,12 @@ try {
   run(sb, 'doc=normalizzaDoc(' + JSON.stringify(d) + '); Pianta.aggiornaDoc(doc);');
   const esito = JSON.parse(run(sb, 'JSON.stringify(Pianta.scala(doc))'));
   const st = JSON.parse(run(sb, 'JSON.stringify(doc.pianta.anteprima.stanze.map(s=>[s.w,s.h]))'));
-  const q = JSON.parse(run(sb, 'JSON.stringify(doc.pianta.anteprima.quote.map(x=>x.txt))'));
+  const q = JSON.parse(run(sb, 'JSON.stringify(doc.pianta.anteprima.quote.filter(x=>!x.d).map(x=>x.txt))'));
+  const qd = JSON.parse(run(sb, 'JSON.stringify(doc.pianta.anteprima.quote.filter(x=>x.d).map(x=>x.txt))'));   // muri opposti: ricavati
   const PPM = C * 20;
   const svg = run(sb, "svgPianta(doc,'pdf')");
   const ok = esito.esito === 'ok' && Math.abs(st[0][0] / PPM - 4.5) < .06 && Math.abs(st[0][1] / PPM - 3) < .06
-    && q.join() === '4,50 m,3,00 m' && svg.includes('4,50 m');
+    && q.join() === '4,50 m,3,00 m' && qd.sort().join() === '3,00 m,4,50 m' && svg.includes('4,50 m');
   check('Misure dei muri: messa in scala e pianta del PDF', ok, JSON.stringify({ esito, st, q }));
 } catch (e) { check('Misure dei muri: messa in scala e pianta del PDF', false, e.message); }
 
