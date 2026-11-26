@@ -505,11 +505,12 @@ const Pianta=(function(){
   // dai locali misurati (serve solo per disegnare porte, finestre e il 3D)
   function metriPerUnita(){
     if(inScala) return 1/PPM;
+    // metri per unità ricavati da TUTTE le misure: stanze (lunghezza, larghezza)
+    // e muri misurati. Prima contavano solo le stanze: con i soli muri misurati
+    // porte e finestre uscivano piccolissime rispetto ai muri.
     let num=0, den=0;
-    for(const r of regions){
-      const d=r.data; if(!misurato(d)) continue;
-      num+=Math.sqrt((d.L*d.W)/(r.cells.length*CELL*CELL))*r.cells.length; den+=r.cells.length;
-    }
+    const lv=lineeEVincoli(null, null);
+    [[lv.X,lv.vx],[lv.Y,lv.vy]].forEach(([L,vv])=>vv.forEach(c=>{ const u=L[c.b]-L[c.a]; if(u>0){ num+=c.val; den+=u; } }));
     return den ? num/den : 1/(CELL*4);
   }
   function altezzaMuri(){
