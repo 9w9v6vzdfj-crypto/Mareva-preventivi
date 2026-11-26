@@ -328,7 +328,7 @@ function wzEl(id){ return document.getElementById(id); }
 function wzToast(msg){
   const t=wzEl('wzToast'); if(!t) return;
   t.textContent=msg; t.style.display='block';
-  clearTimeout(_wzToastT); _wzToastT=setTimeout(()=>{ t.style.display='none'; }, 2800);
+  clearTimeout(_wzToastT); _wzToastT=setTimeout(()=>{ t.style.display='none'; }, msg.length>80?6000:2800);
 }
 function wzNuovo(){ doc=nuovoDoc(); wzStep=0; wzSel=null; wzChiudiScheda(true); wzRender(); }
 function wzApri(id){
@@ -688,6 +688,15 @@ function wzChange(e){
   else if(d.doc==='stato'){ doc.stato=t.value; wzSalva(); }
 }
 
+/* ── misure: coerenti con la pianta (tolleranza 0,5 m) ── */
+// null se va bene; altrimenti il messaggio (errore, o dubbio non confermato)
+function wzControllaPianta(l, L, W){
+  if(!(doc.via==='disegno' && l.inPianta && typeof Pianta!=='undefined' && Pianta.controllaLocale)) return null;
+  const ck=Pianta.controllaLocale(doc, l.id, L, W);
+  if(ck.errore) return ck.errore;
+  if(ck.dubbio && !confirm(ck.dubbio)) return 'Misura non salvata';
+  return null;
+}
 /* ── misure: la pianta si mette in scala quando tutte le stanze le hanno ── */
 function wzDopoMisure(l, cambiate){
   if(!(doc.via==='disegno' && haPianta(doc) && l.inPianta && typeof Pianta!=='undefined')) return null;
@@ -899,6 +908,16 @@ function wzSheetInput(e){
 function wzSheetChange(e){
   const l=wzLoc(); if(!l || wzStep!==2) return;
   const t=e.target, d=t.dataset;
+  if(d.smis){
+    const errore=wzControllaPianta(l, l.L, l.W);
+    if(errore){
+      const pr=String(_wzMisPrima||'').split('|').map(Number);
+      l.L=pr[0]||0; l.W=pr[1]||0; l.H=pr[2]||H_BASE;
+      ['L','W','H'].forEach(k=>{ const el=wzEl('s'+k); if(el) el.value=prIn(l[k]); });
+      wzAggLavori(); wzSalva(); wzToast(errore);
+    }
+    return;
+  }
   if(d.lav) l.lav[d.lav]=t.checked;
   else if(d.imp) l.imp[d.imp].on=t.checked;
   else if(d.inf!==undefined && t.tagName==='SELECT'){
@@ -924,6 +943,8 @@ function wzSheetClick(e){
   }
   if(act==='salva-mis'){
     const nL=prNum(wzEl('mL').value), nW=prNum(wzEl('mW').value), cambiate= nL!==l.L || nW!==l.W;
+    const errore=wzControllaPianta(l, nL, nW);
+    if(errore){ wzToast(errore); return; }
     l.L=nL; l.W=nW; l.H=prNum(wzEl('mH').value)||H_BASE;
     const msg=wzDopoMisure(l, cambiate);
     _wzMisPrima=null; wzSalva(); wzChiudiScheda();
