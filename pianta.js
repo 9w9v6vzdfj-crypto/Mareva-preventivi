@@ -83,7 +83,9 @@ const Pianta=(function(){
     });
     roomsData=roomsData.filter(d=>usati.has(d.locId) && regions.some(r=>r.data && r.data.ref===d));
     docRef.locali=docRef.locali.filter(l=>usati.has(l.id) || !l.daPianta || locMisurato(l) || locRighe(l,docRef.prezzi).length || String(l.note||'').trim());
-    docRef.locali.forEach(l=>{ l.inPianta=usati.has(l.id); });
+    docRef.locali.forEach(l=>{ l.inPianta=usati.has(l.id); if(!l.inPianta) delete l.forma; });
+    // forma delle stanze non rettangolari: il pavimento toglie la parte che manca
+    regions.forEach(r=>{ const l=r.data && locDi(r.data.locId); if(!l) return; const f=formaRegione(r); if(f.a<0.999 || f.p>1.001) l.forma=f; else delete l.forma; });
     // ordine dei locali = ordine delle stanze sulla pianta (dall'alto a sinistra)
     const ord=new Map(regions.map((r,i)=>[r.data && r.data.locId, i]));
     docRef.locali.sort((a,b)=>(ord.has(a.id)?ord.get(a.id):1e6)-(ord.has(b.id)?ord.get(b.id):1e6));
@@ -133,7 +135,8 @@ const Pianta=(function(){
     });
     const K=metriPerUnita();
     const inf=infissi.filter(f=>muroDi(f)).map(f=>({tipo:f.tipo, o:f.o, x:f.x, y:f.y, half:f.w/2/K}));
-    const qt=quoteValide().map(q=>({o:q.o, x:q.o==='H'?(q.a+q.b)/2:q.c, y:q.o==='H'?q.c:(q.a+q.b)/2, txt:f2(q.val)+' m'}));
+    const qt=quoteValide().map(q=>Object.assign({d:false},q)).concat(dedotte.map(q=>Object.assign({d:true},q)))
+      .map(q=>({o:q.o, x:q.o==='H'?(q.a+q.b)/2:q.c, y:q.o==='H'?q.c:(q.a+q.b)/2, txt:f2(q.val)+' m', d:q.d}));
     return {box:[x0,y0,x1,y1], muri:tutti.map(w=>[w.x1,w.y1,w.x2,w.y2]), vani:virtuali.map(w=>[w.x1,w.y1,w.x2,w.y2]), stanze, inf, quote:qt, inScala, cell:CELL};
   }
 
@@ -484,6 +487,7 @@ const Pianta=(function(){
     }
     // porte e finestre: la loro superficie si toglie dalle pareti dei locali su
     // ciascun lato del muro (una porta tra due stanze conta per entrambe)
+    calcolaDedotte();
     regions.forEach(r=>{ r.ded=0; r.nInf=0; });
     for(const f of infissi){
       if(!muroDi(f)) continue;
@@ -502,9 +506,19 @@ const Pianta=(function(){
   // i dati di una stanza sono quelli del suo locale nel preventivo
   function vista(d){ const l=locDi(d.locId)||{}; return {ref:d, locId:d.locId, name:l.nome||'', L:l.L||0, W:l.W||0, H:l.H||0}; }
   // r (facoltativo) = il locale sul foglio: serve per togliere porte e finestre
+  // Forma di una stanza rispetto al suo rettangolo: a = quota di area occupata
+  // (a L: < 1), p = perimetro vero / perimetro del rettangolo (a L: 1, a U: > 1).
+  function formaRegione(r){
+    if(r._forma) return r._forma;
+    const w=r.maxx-r.minx+1, h=r.maxy-r.miny+1, cols=grid.cols, set=new Set(r.cells);
+    let bordo=0;
+    for(const c of r.cells){ const gx=c%cols; if(gx===0||!set.has(c-1)) bordo++; if(gx===cols-1||!set.has(c+1)) bordo++; if(!set.has(c-cols)) bordo++; if(!set.has(c+cols)) bordo++; }
+    r._forma={a:+(r.cells.length/(w*h)).toFixed(4), p:+(bordo/(2*(w+h))).toFixed(4)};
+    return r._forma;
+  }
   function calcola(d, r){
-    const L=d.L, Wd=d.W, Hh=d.H>0?d.H:2.7;
-    const floor=L*Wd, lordo=2*(L+Wd)*Hh, per=2*(L+Wd);
+    const L=d.L, Wd=d.W, Hh=d.H>0?d.H:2.7, f=(r && grid && r.cells) ? formaRegione(r) : {a:1,p:1};
+    const floor=L*Wd*f.a, per=2*(L+Wd)*f.p, lordo=per*Hh;
     const ded=Math.min(lordo, r && r.ded ? r.ded : 0), walls=lordo-ded;
     return {floor, ceil:floor, walls, lordo, ded, per};
   }
@@ -604,18 +618,49 @@ const Pianta=(function(){
   const quotaDi=w=> w.y1===w.y2 ? quote.find(q=>q.o==='H' && q.c===w.y1 && q.a===w.x1 && q.b===w.x2)
                                  : quote.find(q=>q.o==='V' && q.c===w.x1 && q.a===w.y1 && q.b===w.y2);
   // stanza rettangolare con un lato misurato per intero: lunghezza/larghezza si compilano da sole
+  /* ── MISURE DEDOTTE ──
+     Le misure collegano le linee della pianta: due linee collegate (anche
+     attraverso altre misure) hanno una distanza nota. Union-find pesato:
+     off[i] = posizione della linea i rispetto alla radice del suo gruppo. */
+  function distanzeNote(){
+    const lv=lineeEVincoli(null, null);
+    const sistema=(n, vinc)=>{
+      const par=[...Array(n).keys()], off=new Array(n).fill(0);
+      const find=i=>{ if(par[i]!==i){ const q=par[i], r=find(q); off[i]+=off[q]; par[i]=r; } return par[i]; };
+      for(const c of vinc){
+        const ra=find(c.a), rb=find(c.b); if(ra===rb) continue;
+        par[rb]=ra; off[rb]=c.val-off[c.b]+off[c.a];
+      }
+      return (a,b)=>{ if(a<0||b<0||find(a)!==find(b)) return null; return off[b]-off[a]; };
+    };
+    const dx=sistema(lv.X.length, lv.vx), dy=sistema(lv.Y.length, lv.vy);
+    return { x:(a,b)=>dx(lv.X.indexOf(a), lv.X.indexOf(b)), y:(a,b)=>dy(lv.Y.indexOf(a), lv.Y.indexOf(b)) };
+  }
+  // misure dei muri che si ricavano dalle altre (mostrate in grigio)
+  let dedotte=[];
+  function calcolaDedotte(){
+    dedotte=[];
+    if(!walls.length || !quote.length && !regions.some(r=>misurato(r.data))) return;
+    const dn=distanzeNote(), qv=quoteValide();
+    for(const w of walls){
+      if(quotaDi(w)) continue;
+      const hor=w.y1===w.y2, a=hor?w.x1:w.y1, b=hor?w.x2:w.y2;
+      if(qv.some(q=>q.o===(hor?'H':'V') && q.c===(hor?w.y1:w.x1) && q.a<=a && q.b>=b && (q.a===a && q.b===b))) continue;
+      const v= hor ? dn.x(a,b) : dn.y(a,b);
+      if(v!=null && v>0.005) dedotte.push({o:hor?'H':'V', c:hor?w.y1:w.x1, a, b, val:Math.round(v*100)/100});
+    }
+  }
+  // stanze senza misure ma con le linee collegate da misure: si compilano da sole
   function compilaDaQuote(){
     if(!grid || !docRef) return [];
-    const qv=quoteValide(), fatti=[];
+    const dn=distanzeNote(), fatti=[];
     regions.forEach((r,i)=>{
       const l=r.data && locDi(r.data.locId); if(!l) return;
-      if(r.cells.length!==(r.maxx-r.minx+1)*(r.maxy-r.miny+1)) return;
       const xa=(r.minx+grid.gx0)*CELL, xb=(r.maxx+1+grid.gx0)*CELL, ya=(r.miny+grid.gy0)*CELL, yb=(r.maxy+1+grid.gy0)*CELL;
-      const qL=qv.find(q=>q.o==='H' && (q.c===ya||q.c===yb) && q.a===xa && q.b===xb);
-      const qW=qv.find(q=>q.o==='V' && (q.c===xa||q.c===xb) && q.a===ya && q.b===yb);
+      const vL=dn.x(xa,xb), vW=dn.y(ya,yb);
       let ok=false;
-      if(qL && !(l.L>0)){ l.L=qL.val; ok=true; }
-      if(qW && !(l.W>0)){ l.W=qW.val; ok=true; }
+      if(vL!=null && vL>0.05 && !(l.L>0)){ l.L=Math.round(vL*100)/100; ok=true; }
+      if(vW!=null && vW>0.05 && !(l.W>0)){ l.W=Math.round(vW*100)/100; ok=true; }
       if(ok){ if(!(l.H>0)) l.H=2.7; fatti.push(nomeLocale(r,i)); }
     });
     return fatti;
@@ -871,14 +916,15 @@ const Pianta=(function(){
     ctx.textAlign='center'; ctx.textBaseline='middle';
     // misure dei muri, scritte lungo il muro
     ctx.font=`700 12px 'Inter', system-ui, sans-serif`;
-    for(const q of quoteValide()){
+    for(const q of quoteValide().map(q=>Object.assign({d:false},q)).concat(dedotte.map(q=>Object.assign({d:true},q)))){
       const m= q.o==='H' ? toScreen({x:(q.a+q.b)/2, y:q.c}) : toScreen({x:q.c, y:(q.a+q.b)/2});
       if((q.b-q.a)*s<28) continue;
       const txt=f2(q.val)+' m';
+      ctx.font= q.d ? `500 11.5px 'Inter', system-ui, sans-serif` : `700 12px 'Inter', system-ui, sans-serif`;
       ctx.save(); ctx.translate(m.x, m.y); if(q.o==='V') ctx.rotate(-Math.PI/2);
       const tw=ctx.measureText(txt).width+10;
       ctx.fillStyle=t.paper; ctx.fillRect(-tw/2,-19,tw,15);
-      ctx.fillStyle=t.accent; ctx.fillText(txt,0,-11);
+      ctx.fillStyle= q.d ? t.muted : t.accent; ctx.fillText(txt,0,-11);
       ctx.restore();
     }
     if(!walls.length && !drawing){
@@ -899,7 +945,7 @@ const Pianta=(function(){
       const fl=`500 ${fs-1}px 'Inter', system-ui, sans-serif`;
       if(misurato(r.data)){
         // i metri quadri compaiono solo dopo che le misure sono state inserite
-        if(bh>=fs*3) lines.push({txt:f1(calcola(r.data).floor)+' m²', font:fl, col:t.ink});
+        if(bh>=fs*3) lines.push({txt:f1(calcola(r.data, r).floor)+' m²', font:fl, col:t.ink});
         if(bh>=fs*4.6) lines.push({txt:`${f2(r.data.L)} × ${f2(r.data.W)}`, font:fl, col:t.muted});
       } else if(bh>=fs*3) lines.push({txt:'tocca qui', font:fl, col:t.accent});
       const lh=fs+3, y0=p.y-(lines.length-1)*lh/2;
@@ -1045,7 +1091,7 @@ const Pianta=(function(){
     l.nome=fName.value.trim(); l.L=nL; l.W=nW; l.H=num(fH.value)||2.7;
     const d=vista(r.data.ref);
     if(cambiate && inScala){ inScala=false; avvisi=[]; }
-    chiudiModal(); aggiorna();
+    chiudiModal(); ricalcola(); compilaDaQuote(); aggiorna();
     const tutte=regions.length && regions.every(x=>misurato(x.data));
     if(tutte && !inScala){ setTimeout(mettiInScala, 300); return; }   // l'ultima misura mette in scala da sola
     const restano=regions.filter(x=>!misurato(x.data)).length;
@@ -1283,8 +1329,8 @@ const Pianta=(function(){
   function apriPop(i, p, wp){
     selWall=i; popPunto=wp; requestDraw();
     const w=walls[i], hor=w.y1===w.y2, lu=(hor?w.x2-w.x1:w.y2-w.y1);
-    const q=quotaDi(w);
-    $('popT').textContent= q ? `Muro · ${f2(q.val)} m` : (inScala ? `Muro · ${f2(lu/PPM)} m` : 'Muro');
+    const q=quotaDi(w), dd=dedotte.find(x=>x.o===(w.y1===w.y2?'H':'V') && x.a===(w.y1===w.y2?w.x1:w.y1) && x.b===(w.y1===w.y2?w.x2:w.y2));
+    $('popT').textContent= q ? `Muro · ${f2(q.val)} m` : (dd ? `Muro · ${f2(dd.val)} m (dalle altre misure)` : (inScala ? `Muro · ${f2(lu/PPM)} m` : 'Muro'));
     $('popMis').lastChild.textContent= q ? 'Cambia misura' : 'Misura muro';
     pop.hidden=false;
     const r=pop.getBoundingClientRect();
@@ -1689,9 +1735,15 @@ const Pianta=(function(){
     docRef=null;
     return ck;
   }
+  // Dopo misure inserite dal preventivo: le stanze collegate da misure si compilano.
+  function compila(d){
+    if(!d || !d.pianta || !(d.pianta.walls||[]).length) return [];
+    carica(d); alChiudere=null; ricalcola(); const f=compilaDaQuote(); esporta(); docRef=null;
+    return f;
+  }
   // Ricalcola i collegamenti stanze↔locali (es. dopo modifiche nel preventivo).
   function aggiornaDoc(d){ carica(d); alChiudere=null; ricalcola(); esporta(); docRef=null; }
   bottoniStoria();
-  return {apri, chiudi, scala, aggiornaDoc, controllaLocale, aperto:()=>aperto,
+  return {apri, chiudi, scala, aggiornaDoc, controllaLocale, compila, aperto:()=>aperto,
           _tagliaCode:(ws,max)=>tagliaCode(sistemaPareti(ws), max)};   // per i test
 })();

@@ -106,8 +106,10 @@ const locMisurato=l=>l.L>0 && l.W>0;
 const locAreaInfissi=l=>(l.inf||[]).reduce((a,x)=>a+prNum(x.lung)*prNum(x.alt)/1e6,0);
 function locSup(l){
   if(!locMisurato(l)) return null;
-  const H=l.H>0?l.H:H_BASE, lordo=2*(l.L+l.W)*H, ded=Math.min(locAreaInfissi(l)+(Number(l.dedExtra)||0), lordo);
-  return {pavimento:l.L*l.W, soffitto:l.L*l.W, pareti:lordo-ded, lordo, ded, perimetro:2*(l.L+l.W)};
+  // stanze non rettangolari (dalla pianta): l.forma = {a: area/rettangolo, p: perimetro/rettangolo}
+  const fa=(l.forma&&l.forma.a>0)?l.forma.a:1, fp=(l.forma&&l.forma.p>0)?l.forma.p:1;
+  const H=l.H>0?l.H:H_BASE, per=2*(l.L+l.W)*fp, lordo=per*H, ded=Math.min(locAreaInfissi(l)+(Number(l.dedExtra)||0), lordo);
+  return {pavimento:l.L*l.W*fa, soffitto:l.L*l.W*fa, pareti:lordo-ded, lordo, ded, perimetro:per};
 }
 const descInfisso=x=>`${APR[x.apr]||APR.battente}, ${x.ante} ${x.ante>1?'ante':'anta'}`;
 const nomeInfisso=x=>`${(TIPI_INF[x.tipo]||TIPI_INF.finestra).lbl} ${Math.round(prNum(x.lung))}×${Math.round(prNum(x.alt))} mm`;
@@ -233,9 +235,9 @@ function svgPianta(d, fase){
   out+=`<path d="${a.muri.map(m=>`M${m[0]} ${m[1]}L${m[2]} ${m[3]}`).join('')}" stroke="#111827" stroke-width="${(sw*2.2).toFixed(2)}" stroke-linecap="round" fill="none"/>`;
   if(!pdf && (a.vani||[]).length) out+=`<path d="${a.vani.map(m=>`M${m[0]} ${m[1]}L${m[2]} ${m[3]}`).join('')}" stroke="#2563EB" stroke-width="${sw.toFixed(2)}" stroke-dasharray="${(sw*3).toFixed(1)} ${(sw*2.5).toFixed(1)}" fill="none"/>`;
   (a.quote||[]).forEach(q=>{
-    const fq=(fs0*.8).toFixed(1), off=sw*3;
-    out+= q.o==='H' ? `<text x="${q.x}" y="${q.y-off}" font-size="${fq}" font-weight="700" text-anchor="middle" fill="#2563EB" stroke="#fff" stroke-width="${(sw*1.4).toFixed(2)}" paint-order="stroke" font-family="-apple-system,Arial,sans-serif">${esc(q.txt)}</text>`
-                    : `<text x="${q.x-off}" y="${q.y}" font-size="${fq}" font-weight="700" text-anchor="middle" fill="#2563EB" stroke="#fff" stroke-width="${(sw*1.4).toFixed(2)}" paint-order="stroke" font-family="-apple-system,Arial,sans-serif" transform="rotate(-90 ${q.x-off} ${q.y})">${esc(q.txt)}</text>`;
+    const fq=(fs0*.8).toFixed(1), off=sw*3, col=q.d?'#6B7280':'#2563EB', peso=q.d?'500':'700';
+    out+= q.o==='H' ? `<text x="${q.x}" y="${q.y-off}" font-size="${fq}" font-weight="${peso}" text-anchor="middle" fill="${col}" stroke="#fff" stroke-width="${(sw*1.4).toFixed(2)}" paint-order="stroke" font-family="-apple-system,Arial,sans-serif">${esc(q.txt)}</text>`
+                    : `<text x="${q.x-off}" y="${q.y}" font-size="${fq}" font-weight="${peso}" text-anchor="middle" fill="${col}" stroke="#fff" stroke-width="${(sw*1.4).toFixed(2)}" paint-order="stroke" font-family="-apple-system,Arial,sans-serif" transform="rotate(-90 ${q.x-off} ${q.y})">${esc(q.txt)}</text>`;
   });
   (a.inf||[]).forEach(f=>{
     const h=f.half, hor=f.o==='H';
@@ -701,8 +703,9 @@ function wzControllaPianta(l, L, W){
 function wzDopoMisure(l, cambiate){
   if(!(doc.via==='disegno' && haPianta(doc) && l.inPianta && typeof Pianta!=='undefined')) return null;
   if(cambiate) doc.pianta.inScala=false;
+  const compilate=Pianta.compila ? Pianta.compila(doc) : [];
   const daMisurare=doc.locali.filter(x=>x.inPianta && !locMisurato(x)).length;
-  if(daMisurare || doc.pianta.inScala) return null;
+  if(daMisurare || doc.pianta.inScala) return compilate.length ? `Misure ricavate anche per: ${compilate.join(', ')}` : null;
   const r=Pianta.scala(doc);
   if(r.esito!=='ok') return null;
   return r.avvisi.length ? 'Pianta in scala, ma alcune misure non tornano: controllale nel disegno' : 'Tutte le misure ci sono: pianta messa in scala';
