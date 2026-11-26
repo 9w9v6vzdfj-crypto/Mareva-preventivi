@@ -1,7 +1,7 @@
 {
   "name": "Facile Preventivo",
   "short_name": "FacilePreventivo",
-  "description": "App per sopralluoghi e preventivi per artigiani (imbianchino, muratore, elettricista, idraulico e altro)",
+  "description": "Preventivi edili dal telefono: pianta disegnata col dito, misure, lavori e PDF da inviare al cliente",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#F7F8FA",

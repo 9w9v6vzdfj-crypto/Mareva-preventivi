@@ -1,24 +1,27 @@
 # Facile Preventivo
 
 PWA per imprese edili e artigiani per fare **preventivi** dal telefono, in
-quattro passi sempre uguali: **Locali → Misure → Lavori → Preventivo**, poi un
-PDF stampabile con l'intestazione dell'impresa. Archivio con stati (bozza /
+tre passi sempre uguali: **Locali (o Pianta) con le misure → Lavori →
+Preventivo**, poi un PDF con l'intestazione dell'impresa, da stampare o inviare
+(📤 Invia: PDF vero condiviso dal telefono). Archivio con stati (bozza /
 inviato / accettato / rifiutato) e duplicazione per lavori simili.
 
-Un locale, una scheda: al passo Misure si scrivono lunghezza, larghezza e
-altezza; al passo Lavori si spuntano le lavorazioni e **le quantità arrivano da
-sole dalle misure** (m² di pareti, soffitto o pavimento). Nella scheda lavori:
+Le misure si scrivono al primo passo (in riga, o toccando la stanza sulla
+pianta) e sono facoltative. Al passo Lavori, in cima, i lavori **"in tutti i
+locali"** (una spunta vale per ogni stanza); le stanze mostrano solo extra ed
+eccezioni, e **le quantità arrivano da sole dalle misure** (m² di pareti,
+soffitto o pavimento; senza misure il lavoro si prezza **a corpo**). In fondo
+le **voci per tutto il cantiere** (smaltimento macerie, pulizia, ponteggio,
+pratiche…). Nella scheda del locale:
 
 - **lavori più usati** (demolizioni, massetto, pavimenti, intonaco,
-  tinteggiature, controsoffitto, smaltimento) con prezzo al m²; l'ultimo prezzo
-  usato viene ricordato nel *listino* e proposto nei preventivi successivi;
+  tinteggiature, controsoffitto) con prezzo al m²; i prezzi stanno nel
+  *listino* dell'impresa (chiesto una volta, modificabile da Impresa);
 - **impianti** elettrico e idraulico come voce a corpo, con dettagli facoltativi;
 - **infissi** col disegno tecnico in prospetto (funzione pura `disegnoInfisso`:
   "V" tratteggiata col vertice sul lato cerniere, vasistas, anta-ribalta,
   scorrevole, fissa, quote in mm); la loro superficie è tolta dalle pareti;
 - **lavorazioni scritte a mano** (quantità, unità, prezzo) e **note** del locale.
-
-"Copia su tutti i locali" ripete lavori e impianti in ogni stanza.
 
 Si può partire **disegnando la pianta col dito** (`pianta.js`, foglio a tutto
 schermo): le linee storte vengono raddrizzate e agganciate, ogni stanza chiusa
@@ -29,8 +32,10 @@ pianta **si mette in scala da sola** (minimi quadrati sulle linee della
 pianta). C'è anche la vista 3D (Three.js da CDN, caricato solo se serve). La
 pianta 2D compare nei passi Misure e Lavori e in testa al PDF.
 
-I preventivi della versione precedente (a mestieri) restano in archivio ma non
-si aprono più: si possono solo eliminare.
+La pianta si può aggiungere dopo (le stanze si collegano ai locali già
+scritti) o togliere (i locali restano). "Usa come modello" riparte da un
+preventivo esistente con un cliente nuovo. I preventivi della versione
+precedente (a mestieri) non si aprono più: in Archivio si eliminano in blocco.
 
 ## Com'è fatta
 

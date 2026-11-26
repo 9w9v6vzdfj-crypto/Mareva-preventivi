@@ -561,9 +561,8 @@ function aggiornaPreviewImpresa(){
     </div>`;
 }
 
-function intestazionePDF(tipo){
-  // tipo: 'preventivo' | 'sopralluogo'
-  const sottotitolo = tipo==='sopralluogo' ? 'Scheda sopralluogo' : 'Preventivo lavori';
+function intestazionePDF(){
+  const sottotitolo = 'Preventivo lavori';
   if(impresa.nome){
     return `
       <div>
@@ -772,13 +771,15 @@ function stampaPDF(){
 // ══════════════════════════════════════════════════════════
 function aggStats(){
   const el=id=>document.getElementById(id);
-  el('s1').textContent=preventivi.length;
-  el('s2').textContent=preventivi.filter(p=>p.stato==='accettato').length;
-  el('s3').textContent=preventivi.filter(p=>!p.stato||p.stato==='bozza'||p.stato==='inviato').length;
-  const s5=el('s5'); if(s5) s5.textContent=preventivi.filter(p=>p.stato==='rifiutato').length;
-  const valAcc=preventivi.filter(p=>p.stato==='accettato').reduce((s,p)=>s+(p.totale||0),0);
+  const validi=preventivi.filter(p=>p.v===2);   // i preventivi della vecchia versione non contano
+  el('s1').textContent=validi.length;
+  el('s2').textContent=validi.filter(p=>p.stato==='accettato').length;
+  el('s3').textContent=validi.filter(p=>!p.stato||p.stato==='bozza').length;
+  const s6=el('s6'); if(s6) s6.textContent=validi.filter(p=>p.stato==='inviato').length;
+  const s5=el('s5'); if(s5) s5.textContent=validi.filter(p=>p.stato==='rifiutato').length;
+  const valAcc=validi.filter(p=>p.stato==='accettato').reduce((s,p)=>s+(p.totale||0),0);
   el('s4').textContent='€'+valAcc.toLocaleString('it-IT',{maximumFractionDigits:0});
-  const sorted=[...preventivi].sort((a,b)=>(b.mod||b.id)-(a.mod||a.id)).slice(0,5);
+  const sorted=[...validi].sort((a,b)=>(b.mod||b.id)-(a.mod||a.id)).slice(0,5);
   const c=el('dashList');
   c.innerHTML = sorted.length ? sorted.map(p=>prevItemHTML(p,true)).join('')
     : `<div class="empty"><div class="empty-icon">📄</div><p>Nessun preventivo ancora.<br>Tocca "Nuovo preventivo" per iniziare.</p></div>`;
@@ -791,7 +792,9 @@ function renderLista(){
     return;
   }
   const sorted=[...preventivi].sort((a,b)=>b.id-a.id);
-  c.innerHTML=sorted.map(p=>prevItemHTML(p,false)).join('');
+  const nVecchi=preventivi.filter(p=>p.v!==2).length;
+  c.innerHTML=(nVecchi?`<button class="btn btn-secondary btn-full" style="margin-bottom:12px;color:var(--red)" onclick="eliminaVecchi()">🗑 Elimina ${nVecchi===1?'il preventivo':'i '+nVecchi+' preventivi'} della vecchia versione</button>`:'')
+    +sorted.map(p=>prevItemHTML(p,false)).join('');
 }
 
 function prevItemHTML(p,compact){
@@ -847,23 +850,23 @@ function cambiaStato(id,stato){
   Store.savePreventivi(preventivi); aggStats();
 }
 
-// Duplica un preventivo: nuova numerazione, data di oggi, stato bozza.
+// "Usa come modello": stessi locali, lavori e prezzi, cliente da riscrivere.
+// Il nuovo preventivo si salva (e conta per il piano gratuito) quando si scrive il nome.
 function duplicaPrev(id){
   if(!Abbo.puoCreare()){ Abbo.paywall(); return; }
-  const p=preventivi.find(x=>String(x.id)===String(id)); if(!p || p.v!==2) return;
-  const copia=JSON.parse(JSON.stringify(p));
-  copia.id=Date.now();
-  copia.numero=nextNum();
-  copia.data=new Date().toLocaleDateString('it-IT');
-  copia.dataISO=new Date().toISOString();
-  copia.stato='bozza';
-  copia.mod=Date.now();
-  preventivi.push(copia);
-  Abbo.registraCreazione();
-  Store.savePreventivi(preventivi);
-  apriPrev(copia.id);
+  if(wzModello(id)) goPage('nuovo');
 }
 
+// Preventivi della versione a mestieri: non si aprono più, si eliminano in blocco.
+function eliminaVecchi(){
+  const vecchi=preventivi.filter(p=>p.v!==2);
+  if(!vecchi.length) return;
+  if(!confirm(`Eliminare ${vecchi.length} ${vecchi.length===1?'preventivo':'preventivi'} della vecchia versione?\nNon si possono recuperare.`)) return;
+  vecchi.forEach(p=>Store.segnaEliminato('prev', p.id));
+  preventivi=preventivi.filter(p=>p.v===2);
+  Store.savePreventivi(preventivi);
+  renderLista(); aggStats();
+}
 function elimina(id){
   if(!confirm('Eliminare questo preventivo?'))return;
   preventivi=preventivi.filter(p=>String(p.id)!==String(id));
@@ -1067,7 +1070,7 @@ const GUIDA_PASSI=[
     testo:'In un minuto ti mostro come si lavora: locali, misure, lavori e un PDF pronto da firmare.',
     mock:'flusso' },
   { el:'btnNuovoPrev', page:'dashboard', titolo:'1 · Nuovo preventivo',
-    testo:'Parti da qui: scrivi il nome del cliente e i locali. Poi l\'app ti accompagna in quattro passi, sempre gli stessi.' },
+    testo:'Parti da qui: scrivi il nome del cliente, poi disegna la pianta o elenca i locali. L\'app ti accompagna in tre passi, sempre gli stessi.' },
   { el:'tab-nuovo', page:'dashboard', titolo:'2 · Misure e lavori, stanza per stanza',
     testo:'Tocchi un locale e metti le misure; poi spunti i lavori: le quantità (m² di pareti, soffitto, pavimento) le calcola l\'app.',
     mock:'preventivo' },

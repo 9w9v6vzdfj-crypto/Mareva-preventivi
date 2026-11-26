@@ -109,16 +109,6 @@ input,select,textarea{-webkit-appearance:none}
 .badge-red{background:var(--red-lt);color:var(--red)}
 .badge-orange{background:var(--orange-lt);color:var(--orange)}
 
-/* ── MESTIERE SELECTOR ── */
-.mestiere-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
-.mestiere-btn{
-  flex:1 1 100px;padding:10px 8px;border-radius:10px;border:1.5px solid var(--border);
-  background:var(--white);cursor:pointer;text-align:center;transition:all .15s;
-}
-.mestiere-btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
-.mestiere-emoji{font-size:22px;display:block;margin-bottom:2px}
-.mestiere-lbl{font-size:12px;font-weight:600}
-
 /* ── STAT CARDS ── */
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
 .stat{background:var(--white);border-radius:var(--radius);border:1px solid var(--border);padding:14px 16px}
@@ -141,69 +131,6 @@ input,select,textarea{-webkit-appearance:none}
 .empty-icon{font-size:40px;margin-bottom:12px}
 .empty p{font-size:14px}
 
-/* ── NUMERO PREVENTIVO ── */
-.prev-number{
-  display:inline-flex;align-items:center;gap:6px;
-  background:var(--accent-lt);border:1.5px solid #BFDBFE;
-  border-radius:8px;padding:6px 12px;
-  font-size:13px;font-weight:700;color:var(--accent);
-  margin-bottom:16px;
-}
-
-/* ── LOCALE CARD ── */
-.locale-card{background:var(--white);border-radius:var(--radius);border:1px solid var(--border);margin-bottom:8px;overflow:hidden}
-.locale-hdr{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:12px 14px;cursor:pointer;
-  transition:background .15s;
-}
-.locale-hdr:hover{background:var(--bg)}
-.locale-hdr-l{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
-.locale-emoji{font-size:20px;width:36px;height:36px;background:var(--bg);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.locale-hdr-name{font-weight:600;font-size:16px;border:none;background:none;padding:0;width:100%;color:var(--text)}
-.locale-hdr-name:focus{outline:none;border-bottom:1.5px solid var(--accent)}
-.locale-hdr-sub{font-size:12px;color:var(--sub);margin-top:1px}
-.locale-hdr-r{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.locale-hdr-tot{font-weight:700;font-size:14px;color:var(--accent)}
-.locale-arrow{color:var(--sub);font-size:12px;transition:transform .2s}
-/* Chevron evidente (pulsante) per aprire/chiudere il locale */
-.locale-toggle{width:30px;height:30px;border-radius:8px;background:var(--accent-lt);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;transition:transform .2s;flex-shrink:0;-webkit-tap-highlight-color:transparent}
-.locale-toggle.open{transform:rotate(180deg)}
-/* Chip "tocca per aggiungere" (lavorazioni suggerite/recenti) */
-.chip-add{display:inline-flex;align-items:center;gap:4px;background:var(--white);color:var(--accent);border:1.5px dashed #BFDBFE;border-radius:20px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.chip-add:hover{background:var(--accent-lt)}
-/* chip condizioni toccabili (elettricista/idraulico) */
-.cond-chip{display:inline-flex;align-items:center;background:var(--white);color:var(--text);border:1.5px solid var(--border);border-radius:20px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s}
-.cond-chip:hover{border-color:var(--accent)}
-.cond-chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
-/* selettore quantità −/+ per le lavorazioni */
-.qstep{display:inline-flex;align-items:center;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;flex:0 0 auto;background:var(--white)}
-.qstep-btn{width:36px;height:40px;border:none;background:var(--bg);font-size:20px;font-weight:700;color:var(--accent);cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center}
-.qstep-btn:active{background:var(--accent-lt)}
-.qstep .qbox-step{width:52px;border:none;border-left:1.5px solid var(--border);border-right:1.5px solid var(--border);border-radius:0;height:40px;text-align:center;font-size:16px;font-weight:700;padding:0}
-.lavoro-rowq-bot .qlbl{font-size:13px;color:var(--sub);font-weight:600}
-.locale-arrow.open{transform:rotate(180deg)}
-.locale-bdy{display:none;padding:14px;border-top:1px solid var(--border);background:var(--bg)}
-.locale-bdy.open{display:block}
-
-/* ── SUPERFICIE BADGE ── */
-.sup-badge{
-  background:var(--accent-lt);border-radius:8px;padding:8px 12px;
-  font-size:13px;color:var(--accent);font-weight:600;margin-bottom:10px;
-  display:flex;align-items:center;justify-content:space-between;
-}
-
-/* ── TOTALE BOX ── */
-.totale-box{background:var(--text);border-radius:var(--radius);padding:16px;margin-top:4px}
-.totale-row{display:flex;justify-content:space-between;font-size:14px;color:rgba(255,255,255,.6);padding:3px 0}
-.totale-row.main{font-size:18px;font-weight:700;color:#fff;border-top:1px solid rgba(255,255,255,.15);margin-top:8px;padding-top:10px}
-.totale-row.main span:last-child{color:#60A5FA}
-
-/* ── SUP TOTALE ── */
-.sup-totale{background:var(--green-lt);border:1px solid #BBF7D0;border-radius:8px;padding:10px 14px;margin-bottom:12px;display:none}
-.sup-totale-val{font-size:18px;font-weight:700;color:var(--green)}
-.sup-totale-lbl{font-size:12px;color:#166534}
-
 /* ── SECTION LABEL ── */
 .section-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--sub);margin:16px 0 8px}
 .section-lbl:first-child{margin-top:0}
@@ -211,66 +138,8 @@ input,select,textarea{-webkit-appearance:none}
 /* ── DIVIDER ── */
 .divider{height:1px;background:var(--border);margin:14px 0}
 
-/* ── COLLAPSIBLE SECTION (dropdown style) ── */
-.collapse{border:1.5px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden;background:var(--white)}
-.collapse-hdr{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:10px 12px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);
-  -webkit-tap-highlight-color:transparent;
-}
-.collapse-hdr:hover{background:var(--bg)}
-.collapse-hdr .locale-arrow{font-size:11px}
-.collapse-bdy{display:none;padding:10px 12px;border-top:1px solid var(--border)}
-.collapse-bdy.open{display:block}
-.collapse-summary{font-size:12px;color:var(--accent);font-weight:600}
-
-/* ── CHECK LIST (lavori / condizioni) ── */
-.check-list{display:flex;flex-direction:column;gap:6px}
-.check-item{
-  display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;
-  border:1.5px solid var(--border);cursor:pointer;font-size:13px;font-weight:500;
-  transition:all .15s;background:var(--white);
-}
-.check-item:hover{border-color:var(--accent)}
-.check-item.on{background:var(--accent-lt);border-color:var(--accent);color:var(--accent);font-weight:600}
-.check-item input{accent-color:var(--accent);width:16px;height:16px;flex-shrink:0}
-.chip-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.chip{
-  display:inline-flex;align-items:center;gap:4px;
-  background:var(--accent-lt);color:var(--accent);border-radius:20px;
-  padding:4px 10px;font-size:12px;font-weight:600;
-}
-.chip button{background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;line-height:1;padding:0;display:flex}
-.add-custom-row{display:flex;gap:6px;margin-top:8px}
-.add-custom-row .input{font-size:16px;padding:8px 10px}
-
-/* (foto rimosse dall'app) */
-
 /* ── STATUS SELECT ── */
 .status-select{appearance:none;-webkit-appearance:none;border:1.5px solid var(--border);border-radius:8px;padding:6px 26px 6px 10px;font-size:12px;font-weight:700;cursor:pointer;background-color:var(--white);color:var(--text);background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23475467' fill='none' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center}
-
-/* ── TOGGLE SWITCH ── */
-.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0}
-.toggle-row .label{margin:0;text-transform:none;font-size:13px;font-weight:600;color:var(--text);letter-spacing:0}
-.switch{position:relative;width:42px;height:24px;flex-shrink:0}
-.switch input{opacity:0;width:0;height:0}
-.slider{position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:24px;transition:.2s}
-.slider::before{position:absolute;content:"";height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
-.switch input:checked+.slider{background:var(--accent)}
-.switch input:checked+.slider::before{transform:translateX(18px)}
-
-/* ── LAVORO ROW (preventivo: prezzo) ── */
-.lavoro-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;background:var(--white);margin-bottom:6px}
-.lavoro-row .lavoro-nome{flex:1;font-size:13px;font-weight:500;min-width:0}
-.lavoro-row .input{width:96px;font-size:16px;padding:8px;flex-shrink:0;text-align:right}
-/* riga lavoro CON quantità (elettricista/idraulico/libero): Q.tà × Prezzo = Totale */
-.lavoro-rowq{padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;background:var(--white);margin-bottom:6px}
-.lavoro-rowq-top{display:flex;align-items:center;gap:8px}
-.lavoro-rowq-top .lavoro-nome{flex:1;font-size:13px;font-weight:500;min-width:0}
-.lavoro-rowq-bot{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px}
-.lavoro-rowq-bot .qbox{width:78px;font-size:16px;padding:8px;text-align:right;border:1.5px solid var(--border);border-radius:8px;background:var(--white);flex:0 0 auto}
-.lavoro-rowq-bot .qmul,.lavoro-rowq-bot .qeq{color:var(--sub);font-size:13px;flex:0 0 auto}
-.lavoro-rowq-bot .qtot{margin-left:auto;font-size:14px;font-weight:700;color:var(--accent);white-space:nowrap}
 
 /* ── PRINT dal modal PDF ── */
 @page{size:A4;margin:14mm}
@@ -314,36 +183,6 @@ input,select,textarea{-webkit-appearance:none}
 .account-menu-email{font-size:12px;color:var(--sub);padding:8px 10px;word-break:break-all;border-bottom:1px solid var(--border);margin-bottom:6px}
 .account-menu-item{display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;font-family:inherit;font-size:15px;font-weight:600;color:var(--text);padding:11px 10px;border-radius:8px}
 .account-menu-item:active{background:var(--bg)}
-
-/* ── SERRAMENTISTA: card serramento e disegno tecnico ── */
-.serr-card{
-  background:var(--white);
-  border:1.5px solid var(--border);
-  border-radius:10px;
-  padding:10px 12px;
-  margin-bottom:10px;
-}
-.serr-hdr{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
-.serr-title{font-size:13px;font-weight:700;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.serr-svg{
-  display:flex;justify-content:center;align-items:center;
-  padding:10px 6px;margin-bottom:10px;
-  background:var(--bg);
-  border:1px dashed var(--border);
-  border-radius:8px;
-}
-.serr-svg svg{max-width:100%;height:auto}
-
-/* ── MODULI: etichetta di gruppo tra le chip dei lavori importati ── */
-.chip-group-lbl{
-  width:100%;
-  font-size:11px;
-  font-weight:700;
-  text-transform:uppercase;
-  letter-spacing:.4px;
-  color:var(--sub);
-  margin-top:8px;
-}
 
 /* ── AUTH: link recupero password ── */
 .auth-link{
@@ -530,8 +369,8 @@ select.wz-mini{width:auto;text-align:left}
 .wz-man .nm{grid-column:1/-1}
 .wz-inf .f,.wz-man .f{display:flex;flex-direction:column;gap:3px;min-width:0}
 .wz-inf .f span,.wz-man .f span{font-size:11px;color:var(--sub)}
-.wz-sheet .sm{width:100%;min-width:0;padding:7px 8px;border:1.5px solid var(--border);border-radius:9px;background:var(--white);font-size:16px;font-variant-numeric:tabular-nums}
-.wz-sheet select.sm{-webkit-appearance:menulist;appearance:auto}
+.wz-sheet .sm,#wz .sm{width:100%;min-width:0;padding:7px 8px;border:1.5px solid var(--border);border-radius:9px;background:var(--white);font-size:16px;font-variant-numeric:tabular-nums}
+.wz-sheet select.sm,#wz select.sm{-webkit-appearance:menulist;appearance:auto}
 .wz-note{min-height:64px;resize:vertical}
 .wz-sh-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .wz-sh-foot b{font-size:17px;font-variant-numeric:tabular-nums}
@@ -539,7 +378,7 @@ select.wz-mini{width:auto;text-align:left}
 .wz-plan-vuota{display:flex;flex-direction:column;align-items:center;gap:8px;padding:28px 10px;border-style:dashed;color:var(--sub);font-size:14px;font-weight:600}
 .wz-editrow .wz-row{flex:1;min-width:0}
 .wz-dalp{display:block;margin-top:4px;font-size:10.5px;font-weight:700;color:var(--accent);text-align:center;text-transform:uppercase;letter-spacing:.4px}
-.wz-sheet .sm:disabled{background:var(--bg);color:var(--sub)}
+.wz-sheet .sm:disabled,#wz .sm:disabled{background:var(--bg);color:var(--sub)}
 
 /* ══════════ PIANTA (foglio di disegno, pianta.js) ══════════ */
 #piantaOv{
@@ -791,3 +630,4 @@ select.wz-mini{width:auto;text-align:left}
 .wz-ghost.wz-full{display:flex;align-items:center;justify-content:center;gap:10px}
 .wz-ghost svg{width:30px;height:auto}
 #piantaOv .pz-chip-loc{border-color:var(--accent);color:var(--accent);font-weight:600}
+.wz-link-in{background:none;border:none;padding:0;color:var(--accent);font-weight:700;font-size:13px;cursor:pointer;text-decoration:underline}
