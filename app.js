@@ -233,7 +233,7 @@ function preparaDatiPerUtente(uid){
   });
 })();
 
-const PAGE_TITLES={dashboard:'Home',nuovo:'Preventivo',lista:'Archivio',impostazioni:'Impresa'};
+const PAGE_TITLES={nuovo:'Nuovo',lista:'Preventivi',impostazioni:'Impresa'};
 
 // ══════════════════════════════════════════════════════════
 //  NAVIGAZIONE
@@ -243,15 +243,20 @@ function goPage(name) {
   document.getElementById('page-'+name).classList.add('active');
   document.querySelectorAll('.tab-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+name)?.classList.add('active');
-  document.getElementById('pageTitle').textContent=PAGE_TITLES[name]||'';
+  document.getElementById('pageTitle').textContent= name==='nuovo' && typeof wzStep!=='undefined' && wzStep ? 'Preventivo' : (PAGE_TITLES[name]||'');
   if(name!=='nuovo'){ wzChiudiScheda(true); const t=document.getElementById('wzToast'); if(t) t.style.display='none'; }
-  if(name==='dashboard') aggStats();
   if(name==='lista') renderLista();
   if(name==='nuovo') wzRender();
   if(name==='impostazioni') caricaImpresa();
   window.scrollTo(0,0);
 }
 function nuovoPreventivo(){ wzNuovo(); goPage('nuovo'); }
+// Tab "Nuovo": dalla pagina iniziale (le due scelte). Il preventivo aperto è già salvato.
+function tabNuovo(){
+  const aperto=document.getElementById('page-nuovo').classList.contains('active');
+  if(typeof wzStep==='undefined' || !wzStep || aperto){ if(typeof wzSalvaOra==='function') wzSalvaOra(); wzNuovo(); }
+  goPage('nuovo');
+}
 function apriPrev(id){ if(wzApri(id)) goPage('nuovo'); }
 function pdfById(id){
   const p=preventivi.find(x=>String(x.id)===String(id)); if(!p) return;
@@ -769,32 +774,28 @@ function stampaPDF(){
 // ══════════════════════════════════════════════════════════
 //  DASHBOARD / ARCHIVIO
 // ══════════════════════════════════════════════════════════
+// Conteggi e filtri dei preventivi (pagina Preventivi). I vecchi non contano.
+let filtroStato='tutti';
 function aggStats(){
-  const el=id=>document.getElementById(id);
-  const validi=preventivi.filter(p=>p.v===2);   // i preventivi della vecchia versione non contano
-  el('s1').textContent=validi.length;
-  el('s2').textContent=validi.filter(p=>p.stato==='accettato').length;
-  el('s3').textContent=validi.filter(p=>!p.stato||p.stato==='bozza').length;
-  const s6=el('s6'); if(s6) s6.textContent=validi.filter(p=>p.stato==='inviato').length;
-  const s5=el('s5'); if(s5) s5.textContent=validi.filter(p=>p.stato==='rifiutato').length;
-  const valAcc=validi.filter(p=>p.stato==='accettato').reduce((s,p)=>s+(p.totale||0),0);
-  el('s4').textContent='€'+valAcc.toLocaleString('it-IT',{maximumFractionDigits:0});
-  const sorted=[...validi].sort((a,b)=>(b.mod||b.id)-(a.mod||a.id)).slice(0,5);
-  const c=el('dashList');
-  c.innerHTML = sorted.length ? sorted.map(p=>prevItemHTML(p,true)).join('')
-    : `<div class="empty"><div class="empty-icon">📄</div><p>Nessun preventivo ancora.<br>Tocca "Nuovo preventivo" per iniziare.</p></div>`;
+  const pl=document.getElementById('page-lista');
+  if(pl && pl.classList.contains('active')) renderLista();
 }
-
+function setFiltro(f){ filtroStato=f; renderLista(); }
 function renderLista(){
   const c=document.getElementById('listaContent');
-  if(!preventivi.length){
-    c.innerHTML=`<div class="empty"><div class="empty-icon">📋</div><p>Nessun preventivo salvato.</p></div>`;
-    return;
-  }
-  const sorted=[...preventivi].sort((a,b)=>b.id-a.id);
-  const nVecchi=preventivi.filter(p=>p.v!==2).length;
-  c.innerHTML=(nVecchi?`<button class="btn btn-secondary btn-full" style="margin-bottom:12px;color:var(--red)" onclick="eliminaVecchi()">🗑 Elimina ${nVecchi===1?'il preventivo':'i '+nVecchi+' preventivi'} della vecchia versione</button>`:'')
-    +sorted.map(p=>prevItemHTML(p,false)).join('');
+  const validi=preventivi.filter(p=>p.v===2);
+  const nVecchi=preventivi.length-validi.length;
+  const conta=s=>validi.filter(p=>(p.stato||'bozza')===s).length;
+  const FILTRI=[['tutti','Tutti',validi.length],['bozza','Bozze',conta('bozza')],['inviato','Inviati',conta('inviato')],['accettato','Accettati',conta('accettato')],['rifiutato','Rifiutati',conta('rifiutato')]];
+  if(!FILTRI.some(f=>f[0]===filtroStato)) filtroStato='tutti';
+  const scelti=validi.filter(p=>filtroStato==='tutti' || (p.stato||'bozza')===filtroStato).sort((x,y)=>(y.mod||y.id)-(x.mod||x.id));
+  const valAcc=validi.filter(p=>p.stato==='accettato').reduce((s,p)=>s+(p.totale||0),0);
+  c.innerHTML=
+    (validi.length?`<div class="filtri">${FILTRI.filter(f=>f[0]==='tutti'||f[2]).map(f=>`<button class="filtro${filtroStato===f[0]?' on':''}" onclick="setFiltro('${f[0]}')">${f[1]} <b>${f[2]}</b></button>`).join('')}</div>`:'')+
+    (filtroStato==='accettato'&&valAcc?`<p class="filtri-nota">Valore accettati: <b>€ ${valAcc.toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2})}</b></p>`:'')+
+    (scelti.length ? scelti.map(p=>prevItemHTML(p,false)).join('')
+      : `<div class="empty"><div class="empty-icon">📋</div><p>${validi.length?'Nessun preventivo in questo stato.':'Nessun preventivo ancora.<br>Tocca "Nuovo" in basso per iniziare.'}</p></div>`)+
+    (nVecchi?`<button class="btn btn-secondary btn-full" style="margin-top:12px;color:var(--red)" onclick="eliminaVecchi()">🗑 Elimina ${nVecchi===1?'il preventivo':'i '+nVecchi+' preventivi'} della vecchia versione</button>`:'');
 }
 
 function prevItemHTML(p,compact){
@@ -826,10 +827,10 @@ function prevItemHTML(p,compact){
     </label>
     <button class="btn btn-sm" style="background:var(--red-lt);color:var(--red);border:none" onclick="event.stopPropagation();elimina('${id}')">✕</button>
   </div>`);
-  return `<div class="prev-item${vecchio?' prev-vecchio':''}" role="button" tabindex="0" onclick="${compact&&!vecchio?`apriPrev('${id}')`:''}">
+  return `<div class="prev-item${vecchio?' prev-vecchio':''}" role="button" tabindex="0" onclick="${!vecchio?`apriPrev('${id}')`:''}">
     <div class="prev-item-top">
       <div>
-        <div class="prev-item-name">${esc(p.cliente?.nome||'')} ${esc(p.cliente?.cognome||'')}</div>
+        <div class="prev-item-name">${esc(p.cliente?.nome||'')||'<span style="color:var(--sub)">Senza nome</span>'} ${esc(p.cliente?.cognome||'')}</div>
         <div class="prev-item-num">${esc(numDoc(p.numero))} · ${esc(p.data||'')}${vecchio?'':` · ${nLoc} ${nLoc===1?'locale':'locali'}`}</div>
       </div>
       <span class="badge ${statoColors[p.stato]||'badge-gray'}">${esc(p.stato||'bozza')}</span>
@@ -1067,20 +1068,20 @@ const Abbo = {
 // ══════════════════════════════════════════════════════════
 const GUIDA_PASSI=[
   { titolo:'Benvenuto in Facile Preventivo! 👋',
-    testo:'In un minuto ti mostro come si lavora: locali, misure, lavori e un PDF pronto da firmare.',
+    testo:'In un minuto ti mostro come si lavora: locali, misure, lavori e un PDF pronto da inviare.',
     mock:'flusso' },
-  { el:'btnNuovoPrev', page:'dashboard', titolo:'1 · Nuovo preventivo',
-    testo:'Parti da qui: scrivi il nome del cliente, poi disegna la pianta o elenca i locali. L\'app ti accompagna in tre passi, sempre gli stessi.' },
-  { el:'tab-nuovo', page:'dashboard', titolo:'2 · Misure e lavori, stanza per stanza',
-    testo:'Tocchi un locale e metti le misure; poi spunti i lavori: le quantità (m² di pareti, soffitto, pavimento) le calcola l\'app.',
+  { el:'wz', page:'nuovo', titolo:'1 · Scegli come partire',
+    testo:'Disegna la pianta col dito, oppure scrivi le stanze in un elenco. Poi l\'app ti accompagna in tre passi, sempre gli stessi.' },
+  { el:'tab-nuovo', page:'nuovo', titolo:'2 · Misure e lavori',
+    testo:'Metti le misure (o prezza a corpo), poi spunti i lavori: le quantità (m² di pareti, soffitto, pavimento) le calcola l\'app.',
     mock:'preventivo' },
-  { el:'tab-lista', page:'dashboard', titolo:'3 · Archivio, stati e PDF',
-    testo:'Ogni preventivo ha uno stato (bozza, inviato, accettato, rifiutato), si duplica per lavori simili e diventa un PDF professionale con un tocco.',
+  { el:'tab-lista', page:'nuovo', titolo:'3 · Bozze e preventivi fatti',
+    testo:'Qui ritrovi tutto, filtrato per stato (bozza, inviato, accettato, rifiutato). Ogni preventivo diventa un PDF da inviare con un tocco.',
     mock:'pdf' },
-  { el:'tab-impostazioni', page:'dashboard', titolo:'4 · I dati della tua impresa',
-    testo:'Nome, P.IVA e contatti finiscono nell\'intestazione dei PDF. Qui trovi anche il backup e questa guida, se vorrai rivederla.' },
-  { el:'pageMenuBtn', page:'dashboard', titolo:'5 · Dati al sicuro ☁️',
-    testo:'Con l\'accesso, i documenti si sincronizzano sul cloud: li ritrovi su ogni dispositivo. Da qui controlli lo stato e "Sincronizza ora". Buon lavoro! 💪' }
+  { el:'tab-impostazioni', page:'nuovo', titolo:'4 · I dati della tua impresa',
+    testo:'Nome, P.IVA e contatti finiscono nell\'intestazione dei PDF; qui c\'è anche il listino prezzi. Compilali prima del primo invio.' },
+  { el:'pageMenuBtn', page:'nuovo', titolo:'5 · Dati al sicuro ☁️',
+    testo:'Con l\'accesso, i documenti si sincronizzano sul cloud: li ritrovi su ogni dispositivo. Buon lavoro! 💪' }
 ];
 
 // Mockup illustrativi (SVG inline, colori dell'app).
@@ -1130,7 +1131,7 @@ const Guida={
     if(!this.passi.length) this.passi = lista;
     this.flag = flag || 'mv_guida';
     this.i=0;
-    if(lista===GUIDA_PASSI) goPage('dashboard');
+    if(lista===GUIDA_PASSI) goPage('nuovo');
     this._render();
   },
   chiudi(){

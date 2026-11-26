@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Facile Preventivo">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=37">
+<link rel="stylesheet" href="style.css?v=38">
 </head>
 <body>
 <!-- ═══ SCHERMATA DI ACCESSO (cancello: l'app sta sotto, coperta finché non entri) ═══ -->
@@ -67,7 +67,7 @@
   <div class="brand">Facile<span>Preventivo</span></div>
   <div class="topnav-right">
     <button class="page-menu-btn" id="pageMenuBtn" onclick="toggleAccountMenu(event)">
-      <span id="pageTitle">Home</span><span class="page-menu-caret">▾</span>
+      <span id="pageTitle">Nuovo</span><span class="page-menu-caret">▾</span>
     </button>
     <div class="account-menu" id="accountMenu" onclick="event.stopPropagation()">
       <div class="account-menu-email" id="accountEmail">—</div>
@@ -78,26 +78,8 @@
   </div>
 </nav>
 
-<!-- ═══ DASHBOARD ═══ -->
-<div class="page active" id="page-dashboard">
-
-  <button class="btn btn-primary btn-full dash-nuovo" id="btnNuovoPrev" onclick="nuovoPreventivo()">+ Nuovo preventivo</button>
-
-  <div class="stats" id="statsGrid">
-    <div class="stat"><div class="stat-val" id="s3">0</div><div class="stat-lbl">Bozze</div></div>
-    <div class="stat"><div class="stat-val" id="s6">0</div><div class="stat-lbl">Inviati, in attesa</div></div>
-    <div class="stat"><div class="stat-val" id="s2">0</div><div class="stat-lbl">Accettati</div></div>
-    <div class="stat"><div class="stat-val" id="s5">0</div><div class="stat-lbl">Rifiutati</div></div>
-    <div class="stat"><div class="stat-val" id="s1">0</div><div class="stat-lbl">Preventivi totali</div></div>
-    <div class="stat"><div class="stat-val" id="s4" style="font-size:18px">€0</div><div class="stat-lbl">Valore accettati</div></div>
-  </div>
-
-  <div class="section-lbl">Preventivi recenti</div>
-  <div id="dashList"></div>
-</div>
-
 <!-- ═══ PREVENTIVO (flusso a passi: tutto generato da preventivo.js) ═══ -->
-<div class="page page-wz" id="page-nuovo">
+<div class="page page-wz active" id="page-nuovo">
   <div id="wz"></div>
 </div>
 
@@ -210,17 +192,13 @@
 
 <!-- BOTTOM TAB BAR -->
 <nav class="bottomnav">
-  <button class="tab-item active" id="tab-dashboard" onclick="goPage('dashboard')">
-    <span class="tab-icon">🏠</span>
-    <span class="tab-label">Home</span>
-  </button>
-  <button class="tab-item" id="tab-nuovo" onclick="goPage('nuovo')">
-    <span class="tab-icon">💶</span>
-    <span class="tab-label">Preventivo</span>
+  <button class="tab-item active" id="tab-nuovo" onclick="tabNuovo()">
+    <span class="tab-icon">✏️</span>
+    <span class="tab-label">Nuovo</span>
   </button>
   <button class="tab-item" id="tab-lista" onclick="goPage('lista')">
     <span class="tab-icon">📁</span>
-    <span class="tab-label">Archivio</span>
+    <span class="tab-label">Preventivi</span>
   </button>
   <button class="tab-item" id="tab-impostazioni" onclick="goPage('impostazioni')">
     <span class="tab-icon">⚙️</span>
@@ -400,8 +378,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="app.js?v=37"></script>
-<script src="preventivo.js?v=37"></script>
-<script src="pianta.js?v=37"></script>
+<script src="app.js?v=38"></script>
+<script src="preventivo.js?v=38"></script>
+<script src="pianta.js?v=38"></script>
 </body>
 </html>

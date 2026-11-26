@@ -338,7 +338,7 @@ function wzApri(id){
 // Salvataggio: basta il nome del cliente. Un nuovo documento conta per il piano gratuito.
 function wzSalvaOra(){
   clearTimeout(_wzSaveT);
-  if(!doc || !String(doc.cliente.nome||'').trim()) return false;
+  if(!doc || !(String(doc.cliente.nome||'').trim() || doc.locali.length || doc.cantiere.length)) return false;
   doc.mod=Date.now(); doc.totale=docTotali(doc).tot;
   const copia=JSON.parse(JSON.stringify(doc));
   const i=preventivi.findIndex(p=>String(p.id)===String(doc.id));
@@ -351,7 +351,7 @@ function wzSalvaOra(){
   return true;
 }
 function wzSalva(){
-  const s=wzEl('wzSalvato'); if(s && doc && doc.cliente.nome) s.textContent='Salvataggio…';
+  const s=wzEl('wzSalvato'); if(s && doc && (doc.cliente.nome || doc.locali.length)) s.textContent='Salvataggio…';
   clearTimeout(_wzSaveT); _wzSaveT=setTimeout(wzSalvaOra, 700);
 }
 // Il prezzo di un lavoro più usato diventa quello proposto nei prossimi preventivi.
@@ -359,25 +359,35 @@ function wzAggiornaListino(id, v){ const l=Store.loadListino(); l[id]=v; Store.s
 function wzSetPrezzo(id, v){ if(!doc) return; doc.prezzi[id]=v; wzAggiornaListino(id, v); }
 
 /* ── schermate ── */
-const IND_LBL=['','← Cliente','← '+'Locali','← Lavori'];
 function wzRender(){
   const root=wzEl('wz'); if(!root) return;
   if(!doc) doc=nuovoDoc();
-  const inizio=wzStep===0;
+  const pt=wzEl('pageTitle'), pn=wzEl('page-nuovo');
+  if(pt && pn && pn.classList.contains('active')) pt.textContent= wzStep ? 'Preventivo' : 'Nuovo';
+  if(wzStep===0){
+    // pagina iniziale: solo le due scelte
+    root.innerHTML=`<div class="wz-start" id="wzStart">
+      <button type="button" class="wz-big" data-a="disegno"><span class="wz-big-ico">${icoPianta()}</span><b>Disegna la pianta</b></button>
+      <button type="button" class="wz-big" data-a="manuale"><span class="wz-big-ico">${icoElenco()}</span><b>Senza disegno</b></button>
+    </div>`;
+    root.classList.add('wz-root-start');
+    return;
+  }
+  root.classList.remove('wz-root-start');
   const salvato=preventivi.some(p=>String(p.id)===String(doc.id));
-  const indietro= wzStep===2 ? (doc.via==='disegno'?'← Pianta':'← Locali') : IND_LBL[wzStep];
+  const nome=String(doc.cliente.nome||'').trim();
+  const indietro= wzStep===2 ? (doc.via==='disegno'?'← Pianta':'← Locali') : (wzStep===3 ? '← Lavori' : '');
   root.innerHTML=`
     <div class="wz-head">
-      <button type="button" class="wz-head-t" data-a="cliente" aria-label="Dati del cliente"><b>${inizio?(doc.via?esc(doc.cliente.nome||'Cliente'):'Nuovo preventivo'):esc(doc.cliente.nome||'Senza nome')}</b>
-        <span>${esc(numDoc(doc.numero))} · <span id="wzSalvato">${salvato?'Salvato':(doc.cliente.nome?'':'Non ancora salvato')}</span>${inizio?'':' · <u>cliente</u>'}</span></button>
-      ${inizio?'':'<button type="button" class="wz-ghost-sm" data-a="nuovo">+ Nuovo</button>'}
+      <button type="button" class="wz-head-t" data-a="cliente" aria-label="Dati del cliente"><b>${nome?esc(nome):'Senza nome'}</b>
+        <span>${esc(numDoc(doc.numero))} · <span id="wzSalvato">${salvato?'Salvato':'Non ancora salvato'}</span> · <u>${nome?'cliente':'scrivi il cliente'}</u></span></button>
     </div>
-    ${inizio?'':`<nav class="wz-steps">${passiLbl().map((p,i)=>`<button type="button" class="wz-st${i+1<wzStep?' fatto':''}${i+1===wzStep?' ora':''}" data-step="${i+1}"><i></i><span>${i+1} · ${p}</span></button>`).join('')}</nav>`}
+    <nav class="wz-steps">${passiLbl().map((p,i)=>`<button type="button" class="wz-st${i+1<wzStep?' fatto':''}${i+1===wzStep?' ora':''}" data-step="${i+1}"><i></i><span>${i+1} · ${p}</span></button>`).join('')}</nav>
     <div class="wz-screen">${wzSchermata()}</div>
-    ${inizio?'':`<div class="wz-cta">
-      <button type="button" class="wz-back" data-a="indietro" aria-label="Torna al passo prima">${indietro}</button>
+    <div class="wz-cta">
+      ${indietro?`<button type="button" class="wz-back" data-a="indietro" aria-label="Torna al passo prima">${indietro}</button>`:''}
       <div class="wz-cta-info">${wzCtaInfo()}</div>
-      <button type="button" class="wz-primary" data-a="avanti">${['Avanti: lavori','Avanti: preventivo','Crea il PDF'][wzStep-1]}</button></div>`}`;
+      <button type="button" class="wz-primary" data-a="avanti">${['Avanti: lavori','Avanti: preventivo','Crea il PDF'][wzStep-1]}</button></div>`;
   // spunte "in tutti i locali" a metà (solo alcune stanze)
   root.querySelectorAll('[data-tutti][data-meta="1"]').forEach(c=>{ c.indeterminate=true; });
 }
@@ -391,29 +401,6 @@ function wzCtaInfo(){
 }
 const chev='<svg class="wz-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
 function wzSchermata(){
-  const c=doc.cliente;
-  if(wzStep===0) return `
-    <div class="wz-field"><label class="wz-lbl" for="wzNome">Cliente</label>
-      <input class="wz-input" id="wzNome" data-cli="nome" value="${esc(c.nome)}" placeholder="Nome e cognome" autocomplete="off"></div>
-    <details class="wz-details"${(c.tel||c.email||c.indirizzo)?' open':''}><summary>Indirizzo e contatti (facoltativi)</summary>
-      <div class="wz-field"><label class="wz-lbl" for="wzInd">Indirizzo dei lavori</label><input class="wz-input" id="wzInd" data-cli="indirizzo" value="${esc(c.indirizzo)}" placeholder="Via, numero, città"></div>
-      <div class="wz-row2">
-        <div class="wz-field"><label class="wz-lbl" for="wzTel">Telefono</label><input class="wz-input" id="wzTel" type="tel" data-cli="tel" value="${esc(c.tel)}"></div>
-        <div class="wz-field"><label class="wz-lbl" for="wzMail">Email</label><input class="wz-input" id="wzMail" type="email" data-cli="email" value="${esc(c.email)}"></div>
-      </div>
-    </details>
-    ${doc.via ? `${String(c.nome||'').trim()?'':'<p class="wz-lead">Scrivi il nome del cliente e continua: locali, lavori e prezzi sono già pronti.</p>'}<button type="button" class="wz-primary wz-full" data-a="continua">Continua il preventivo →</button>` : `
-    <h2 class="wz-h2">Come vuoi partire?</h2>
-    <button type="button" class="wz-pick main" data-a="disegno">
-      <span class="wz-ico">${icoPianta()}</span>
-      <b>Disegna la pianta <span class="wz-tag">consigliato</span></b>
-      <span>Schizzi le stanze col dito, l'app trova i locali e calcola i m².</span>
-    </button>
-    <button type="button" class="wz-pick" data-a="manuale">
-      <span class="wz-ico">${icoElenco()}</span>
-      <b>Senza disegno</b>
-      <span>Scrivi le stanze e le loro misure in un elenco.</span>
-    </button>`}`;
   const pianta=doc.via==='disegno';
   if(wzStep===1 && pianta){
     const svg=svgPianta(doc,'misure');
@@ -502,6 +489,8 @@ function wzSchermata(){
   const STATI={bozza:'📝 Bozza', inviato:'📤 Inviato', accettato:'✅ Accettato', rifiutato:'❌ Rifiutato'};
   return `
     <h2 class="wz-h2">Il preventivo</h2>
+    ${String(doc.cliente.nome||'').trim()?'':`<div class="wz-field"><label class="wz-lbl" for="wzNome3">Cliente <span style="text-transform:none;letter-spacing:0;font-weight:500">· serve per il PDF</span></label>
+      <input class="wz-input" id="wzNome3" data-cli="nome" placeholder="Nome e cognome" autocomplete="off"></div>`}
     ${senzaImpresa?`<div class="wz-nota">Il PDF uscirà senza il nome della tua impresa. <button type="button" class="wz-link-in" data-a="impresa">Completa i dati impresa →</button></div>`:''}
     <div class="wz-sum">${(blocchi+blocCant)||'<div class="wz-sum-room"><p class="wz-empty">Nessuna lavorazione ancora. Torna al passo Lavori.</p></div>'}</div>
     <div class="wz-tot">
@@ -513,7 +502,7 @@ function wzSchermata(){
       <div class="r"><label for="wzStato">Stato</label><select class="wz-mini" id="wzStato" data-doc="stato">${Object.keys(STATI).map(k=>`<option value="${k}"${(doc.stato||'bozza')===k?' selected':''}>${STATI[k]}</option>`).join('')}</select></div>
       <div class="r big"><span>Totale</span><span id="wzTotVal">${prEur(T.tot)}</span></div>
     </div>
-    ${String(doc.cliente.nome||'').trim()?'':'<p class="wz-warn">Manca il nome del cliente: tocca in alto per scriverlo.</p>'}`;
+    `;
 }
 // Quantità complessiva di un lavoro comune (sui locali che lo hanno, o su tutti se nessuno).
 function wzQTutti(x){
@@ -547,15 +536,19 @@ function wzAvanti(){
   if(wzStep<3){ wzVai(wzStep+1); return; }
   wzPdf();
 }
-function wzIndietro(){ wzSalvaOra(); wzVai(wzStep-1); }
+function wzIndietro(){ wzSalvaOra(); wzVai(Math.max(1,wzStep-1)); }
 function wzPdf(){
-  if(!String(doc.cliente.nome||'').trim()){ wzToast('Manca il nome del cliente'); return; }
+  if(!String(doc.cliente.nome||'').trim()){
+    wzToast('Scrivi il nome del cliente per creare il PDF');
+    if(wzStep!==3) wzVai(3);
+    const n=wzEl('wzNome3'); if(n) n.focus();
+    return;
+  }
   wzSalvaOra();
   apriPdfModal(buildPdfPrev(doc), 'Preventivo '+numDoc(doc.numero));
 }
 function wzInizia(via){
-  if(!String(doc.cliente.nome||'').trim()){ wzToast('Scrivi prima il nome del cliente'); const n=wzEl('wzNome'); if(n) n.focus(); return; }
-  doc.via=via; wzSalva(); wzVai(1);
+  doc.via=via; wzVai(1);
   if(via==='disegno' && !haPianta(doc)) wzDisegna();
 }
 function wzDisegna(){
@@ -575,7 +568,8 @@ function wzModello(id){
   doc=normalizzaDoc(JSON.parse(JSON.stringify(p)));
   Object.assign(doc, {id:Date.now(), numero:nextNum(), data:ora.toLocaleDateString('it-IT'), dataISO:ora.toISOString(), stato:'bozza', mod:Date.now(), totale:0});
   doc.cliente={nome:'', tel:'', email:'', indirizzo:''};
-  wzSel=null; wzStep=0; wzRender();
+  wzSel=null; wzStep=1; wzRender();
+  setTimeout(wzApriCliente, 0);
   return true;
 }
 // Da pianta a elenco: i locali restano; le porte/finestre disegnate senza prezzo spariscono,
@@ -634,17 +628,11 @@ function wzClick(e){
   else if(act==='avanti') wzAvanti();
   else if(act==='indietro') wzIndietro();
   else if(act==='addlocale') wzAddLocale();
-  else if(act==='cliente'){ if(wzStep){ wzSalvaOra(); wzStep=0; wzRender(); const n=wzEl('wzNome'); if(n) n.focus(); } }
-  else if(act==='continua') wzInizia(doc.via||'manuale');
-  else if(act==='nuovo'){ wzSalvaOra(); wzNuovo(); try{ window.scrollTo(0,0); }catch(e2){} }
+  else if(act==='cliente') wzApriCliente();
 }
 function wzInput(e){
   const t=e.target, d=t.dataset;
-  if(d.cli){
-    doc.cliente[d.cli]=t.value;
-    if(d.cli==='nome'){ const b=document.querySelector('.wz-head-t b'); if(b && wzStep) b.textContent=t.value||'Senza nome'; }
-    wzSalva(); return;
-  }
+  if(d.cli){ wzSetCliente(d.cli, t.value); return; }
   if(d.nome){ const l=doc.locali.find(x=>x.id===+d.nome); if(l){ l.nome=t.value; wzSalva(); } return; }
   if(d.mis){
     const l=doc.locali.find(x=>x.id===+d.id); if(!l) return;
@@ -718,7 +706,7 @@ function wzApriScheda(id){
 function wzChiudiScheda(silenzioso){
   const bg=wzEl('wzSheetBg'); if(bg) bg.style.display='none';
   document.body.style.overflow='';
-  const l=wzLoc(); let msg=null;
+  const l=wzLoc(); let msg=null; _wzCliente=false;
   // misure cambiate dalla scheda lavori: stesso controllo della scheda misure
   if(l && wzStep===2 && _wzMisPrima!==null && _wzMisPrima!==[l.L,l.W,l.H].join('|')) msg=wzDopoMisure(l, true);
   wzSel=null; _wzMisPrima=null;
@@ -854,10 +842,34 @@ function wzSalvaListino(){
   wzToast('Prezzi salvati');
 }
 
+/* ── scheda del cliente (quando vuoi: in alto, o all'ultimo passo) ── */
+let _wzCliente=false;
+function wzSetCliente(k, v){
+  doc.cliente[k]=v;
+  if(k==='nome'){ const b=document.querySelector('.wz-head-t b'); if(b) b.textContent=String(v).trim()||'Senza nome'; }
+  wzSalva();
+}
+function wzApriCliente(){
+  const c=doc.cliente; _wzCliente=true; wzSel=null;
+  wzEl('wzSheet').innerHTML=`
+    <div class="wz-sh-head"><h3>Cliente</h3><button type="button" class="wz-x" data-sh="close" aria-label="Chiudi">×</button></div>
+    <div class="wz-field"><label class="wz-lbl" for="wzNome">Nome e cognome</label><input class="wz-input" id="wzNome" data-cli="nome" value="${esc(c.nome)}" autocomplete="off"></div>
+    <div class="wz-field"><label class="wz-lbl" for="wzInd">Indirizzo dei lavori</label><input class="wz-input" id="wzInd" data-cli="indirizzo" value="${esc(c.indirizzo)}" placeholder="Via, numero, città"></div>
+    <div class="wz-row2">
+      <div class="wz-field"><label class="wz-lbl" for="wzTel">Telefono</label><input class="wz-input" id="wzTel" type="tel" data-cli="tel" value="${esc(c.tel)}"></div>
+      <div class="wz-field"><label class="wz-lbl" for="wzMail">Email</label><input class="wz-input" id="wzMail" type="email" data-cli="email" value="${esc(c.email)}"></div>
+    </div>
+    <button type="button" class="wz-primary wz-full" data-sh="close">Fatto</button>`;
+  wzEl('wzSheetBg').style.display='flex';
+  document.body.style.overflow='hidden';
+  const n=wzEl('wzNome'); if(n && !c.nome) setTimeout(()=>n.focus(),50);
+}
+
 /* ── eventi della scheda ── */
 function wzSheetInput(e){
   const t=e.target, d=t.dataset;
   if(d.lst) return;
+  if(d.cli){ wzSetCliente(d.cli, t.value); return; }
   const l=wzLoc(); if(!l) return;
   if(d.smis){
     const pre=t.id.charAt(0);

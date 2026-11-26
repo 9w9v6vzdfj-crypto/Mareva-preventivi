@@ -145,7 +145,7 @@ try {
   const seed = {};
   const sb = loadApp(seed);
   boot(sb);
-  const senzaNome = run(sb, 'wzSalvaOra()');
+  const senzaNome = run(sb, 'wzSalvaOra()');   // documento vuoto: non si salva
   run(sb, `doc.cliente.nome='Anna'; wzAddLocale('Cucina'); doc.locali[0].L=4; doc.locali[0].W=3; doc.locali[0].lav.tp=true;
            wzAggiornaListino('tp', 9); doc.prezzi.tp=9; wzSalvaOra();`);
   const salvati = JSON.parse(seed.mv_prev);
@@ -341,12 +341,11 @@ try {
   const sb = loadApp(seed);
   boot(sb);
   const r = JSON.parse(run(sb, `wzModello(1); JSON.stringify({nome:doc.cliente.nome, tel:doc.cliente.tel, loc:doc.locali.length, num:doc.numero, id:doc.id, stato:doc.stato, step:wzStep, n:preventivi.length})`));
-  const salvaVuoto = run(sb, 'wzSalvaOra()');
   run(sb, `doc.cliente.nome='Nuovo'; wzSalvaOra(); eliminaVecchi();`);
   const dopo = JSON.parse(run(sb, `JSON.stringify(preventivi.map(p=>[p.id===1?'orig':(p.v===2?'nuovo':'vecchio'), p.cliente&&p.cliente.nome]))`));
-  const ok = r.nome === '' && r.tel === '' && r.loc === 3 && r.id !== 1 && r.stato === 'bozza' && r.step === 0 && r.n === 2
-    && salvaVuoto === false && dopo.length === 2 && dopo.some(x => x[0] === 'orig' && x[1] === 'Mario Rossi') && dopo.some(x => x[0] === 'nuovo' && x[1] === 'Nuovo');
-  check('Usa come modello (cliente nuovo) ed eliminazione dei vecchi', ok, JSON.stringify({ r, salvaVuoto, dopo }));
+  const ok = r.nome === '' && r.tel === '' && r.loc === 3 && r.id !== 1 && r.stato === 'bozza' && r.step === 1 && r.n === 2
+    && dopo.length === 2 && dopo.some(x => x[0] === 'orig' && x[1] === 'Mario Rossi') && dopo.some(x => x[0] === 'nuovo' && x[1] === 'Nuovo');
+  check('Usa come modello (cliente nuovo) ed eliminazione dei vecchi', ok, JSON.stringify({ r, dopo }));
 } catch (e) { check('Usa come modello (cliente nuovo) ed eliminazione dei vecchi', false, e.message); }
 
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
