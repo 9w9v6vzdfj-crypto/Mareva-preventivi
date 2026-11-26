@@ -361,11 +361,12 @@ try {
   run(sb, 'doc=normalizzaDoc(' + JSON.stringify(d) + '); Pianta.aggiornaDoc(doc);');
   const esito = JSON.parse(run(sb, 'JSON.stringify(Pianta.scala(doc))'));
   const st = JSON.parse(run(sb, 'JSON.stringify(doc.pianta.anteprima.stanze.map(s=>[s.w,s.h]))'));
-  const q = JSON.parse(run(sb, 'JSON.stringify(doc.pianta.anteprima.quote.map(x=>x.txt))'));
+  const q = JSON.parse(run(sb, 'JSON.stringify(doc.pianta.anteprima.quote.filter(x=>!x.d).map(x=>x.txt))'));
+  const qd = JSON.parse(run(sb, 'JSON.stringify(doc.pianta.anteprima.quote.filter(x=>x.d).map(x=>x.txt))'));   // muri opposti: ricavati
   const PPM = C * 20;
   const svg = run(sb, "svgPianta(doc,'pdf')");
   const ok = esito.esito === 'ok' && Math.abs(st[0][0] / PPM - 4.5) < .06 && Math.abs(st[0][1] / PPM - 3) < .06
-    && q.join() === '4,50 m,3,00 m' && svg.includes('4,50 m');
+    && q.join() === '4,50 m,3,00 m' && qd.sort().join() === '3,00 m,4,50 m' && svg.includes('4,50 m');
   check('Misure dei muri: messa in scala e pianta del PDF', ok, JSON.stringify({ esito, st, q }));
 } catch (e) { check('Misure dei muri: messa in scala e pianta del PDF', false, e.message); }
 
@@ -422,6 +423,35 @@ try {
   check('Codine oltre gli angoli tolte, spallette e muri lunghi lasciati', codaTolta && spallettaResta && lungaResta && doppiaTolta,
     JSON.stringify({ codaTolta, spallettaResta, lungaResta, doppiaTolta }));
 } catch (e) { check('Codine oltre gli angoli tolte, spallette e muri lunghi lasciati', false, e.message); }
+
+// 20) Misure dedotte e stanze a L: muro intero + un pezzo → l'altro pezzo; le
+//     stanze collegate da misure si compilano; la stanza a L non conta il bagno.
+try {
+  const sb = loadApp({});
+  boot(sb);
+  const C = 12, k = 4, P = (x, y) => ({ x: x * k * C, y: y * k * C });
+  const seg = (a, b, c, d) => { const p = P(a, b), q = P(c, d); return { x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y) }; };
+  const d = JSON.parse(JSON.stringify(DOC));
+  d.via = 'disegno'; d.locali = [];
+  // casa 12×8 (schizzo), bagno nell'angolo in alto a destra (x 8..12, y 0..3)
+  d.pianta = { walls: [seg(0,0,12,0), seg(0,8,12,8), seg(0,0,0,8), seg(12,0,12,8), seg(8,0,8,3), seg(8,3,12,3)], rooms: [], infissi: [],
+    quote: [ { o:'H', c:0, a:0, b:12*k*C, val:6 },      // muro in alto, intero: 6 m
+             { o:'H', c:0, a:0, b:8*k*C, val:4 },       // il suo primo pezzo: 4 m → l'altro è 2 m
+             { o:'V', c:0, a:0, b:8*k*C, val:5 },       // muro a sinistra: 5 m
+             { o:'V', c:8*k*C, a:0, b:3*k*C, val:1.5 } ] }; // muro del bagno: 1,5 m
+  run(sb, 'doc=normalizzaDoc(' + JSON.stringify(d) + '); Pianta.aggiornaDoc(doc);');
+  const ded = JSON.parse(run(sb, 'JSON.stringify(doc.pianta.anteprima.quote.filter(q=>q.d).map(q=>q.txt))'));
+  const compilate = JSON.parse(run(sb, 'JSON.stringify(Pianta.compila(doc))'));
+  const loc = JSON.parse(run(sb, 'JSON.stringify(doc.locali.map(l=>({L:l.L, W:l.W, a:l.forma?l.forma.a:1})))'));
+  // dopo la messa in scala la stanza a L ha l'area vera: 6×5 − bagno 2×1,5 = 27 m²
+  run(sb, 'Pianta.scala(doc)');
+  const pav = JSON.parse(run(sb, 'JSON.stringify(doc.locali.map(l=>locSup(l).pavimento))'));
+  const grande = Math.max(...pav), bagno = Math.min(...pav);
+  const ok = ded.includes('2,00 m') && compilate.length === 2
+    && loc.some(l => l.L === 6 && l.W === 5 && l.a < 1) && loc.some(l => l.L === 2 && l.W === 1.5 && l.a === 1)
+    && Math.abs(grande - 27) < 0.35 && Math.abs(bagno - 3) < 0.05;
+  check('Misure dedotte, stanze compilate e stanza a L senza il bagno', ok, JSON.stringify({ ded, compilate, loc, pav }));
+} catch (e) { check('Misure dedotte, stanze compilate e stanza a L senza il bagno', false, e.message); }
 
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);
