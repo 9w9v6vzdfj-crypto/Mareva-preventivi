@@ -8,7 +8,7 @@ const vm = require('vm');
 const path = require('path');
 const crypto = require('crypto');
 
-const FILES = ['app.js', 'preventivo.js'];
+const FILES = ['app.js', 'preventivo.js', 'pianta.js'];
 
 let pass = 0, fail = 0;
 function check(name, ok, detail) {
@@ -30,8 +30,9 @@ function loadApp(seed) {
   const els = {};
   const sb = {
     console, Math, Date, JSON, parseFloat, parseInt, isNaN, isFinite,
-    Number, String, Array, Object, Map, Set, encodeURIComponent, decodeURIComponent,
+    Number, String, Array, Object, Map, Set, Uint8Array, Int32Array, encodeURIComponent, decodeURIComponent,
     setTimeout: noop, clearTimeout: noop, alert: noop, confirm: () => true,
+    requestAnimationFrame: noop, performance: { now: () => 0 }, matchMedia: () => ({ matches: false, addEventListener: noop }),
   };
   sb.document = { getElementById: (id) => (els[id] = els[id] || mk(id)), createElement: () => mk('x'), querySelectorAll: () => [], querySelector: () => null, addEventListener: noop, body: mk('body') };
   sb.window = sb; sb.window.addEventListener = noop; sb.scrollTo = noop; sb.navigator = {}; sb.globalThis = sb;
@@ -261,6 +262,39 @@ try {
     && svg.includes('<svg') && svg.includes('>1400<') && svg.includes('>2300<') && svg.includes('stroke-dasharray');
   check('Infissi: aperture e disegno con quote', ok, svg.slice(0, 80));
 } catch (e) { check('Infissi: aperture e disegno con quote', false, e.message); }
+
+// 13) Pianta (senza schermo): stanze disegnate → locali, porta tra due stanze
+//     tolta dalle pareti di entrambe (prezzata solo se si mette un prezzo),
+//     messa in scala con le misure, pianta nel PDF.
+try {
+  const sb = loadApp({});
+  boot(sb);
+  const C = 12, k = 4, P = (x, y) => ({ x: x * k * C, y: y * k * C });
+  const seg = (a, b, c, d) => { const p = P(a, b), q = P(c, d); return { x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y) }; };
+  // schizzo "a occhio": due stanze 6×8 affiancate (fuori proporzione)
+  const d = JSON.parse(JSON.stringify(DOC));
+  d.via = 'disegno'; d.locali = [];
+  d.pianta = { walls: [seg(0,0,6,0), seg(6,0,12,0), seg(0,8,6,8), seg(6,8,12,8), seg(0,0,0,8), seg(12,0,12,8), seg(6,0,6,8)],
+               rooms: [], infissi: [{ id: 'p1', o: 'V', x: 6 * k * C, y: 4 * k * C, tipo: 'porta', w: .8, h: 2.1, sill: 0 }] };
+  run(sb, 'doc=normalizzaDoc(' + JSON.stringify(d) + '); Pianta.aggiornaDoc(doc);');
+  const r1 = JSON.parse(run(sb, 'JSON.stringify(doc.locali.map(l=>({id:l.id, inPianta:l.inPianta, inf:l.inf.length, ded:l.dedExtra})))'));
+  const collegati = r1.length === 2 && r1.every(l => l.inPianta) && r1[0].inf === 1 && r1[1].ded === 1.68 && r1[0].ded === 0;
+  const nonPrezzata = run(sb, 'locRighe(doc.locali[0], doc.prezzi).length') === 0;
+  // misure vere: 4×5 e 3,5×5 → in scala le due stanze hanno queste proporzioni
+  run(sb, `doc.locali[0].nome='Soggiorno'; doc.locali[0].L=4; doc.locali[0].W=5; doc.locali[1].nome='Camera'; doc.locali[1].L=3.5; doc.locali[1].W=5; doc.locali[0].lav.tp=true;`);
+  const esito = JSON.parse(run(sb, 'JSON.stringify(Pianta.scala(doc))'));
+  const st = JSON.parse(run(sb, 'JSON.stringify(doc.pianta.anteprima.stanze.map(s=>[s.w,s.h]))'));
+  const PPM = C * 20;
+  const scalaOk = esito.esito === 'ok' && esito.avvisi.length === 0 && run(sb, 'doc.pianta.inScala') === true
+    && Math.abs(st[0][0] / PPM - 4) < .06 && Math.abs(st[0][1] / PPM - 5) < .06 && Math.abs(st[1][0] / PPM - 3.5) < .06;
+  // pareti Soggiorno: 2×9×2,7 = 48,6 − porta 1,68 = 46,92
+  const pareti = run(sb, 'locSup(doc.locali[0]).pareti');
+  const pdf = run(sb, 'buildPdfPrev(doc)');
+  const pdfOk = pdf.includes('Pianta dei locali') && pdf.includes('aria-label="Pianta dei locali"') && pdf.includes('Soggiorno') && !pdf.includes('Porta interna');
+  const svgMis = run(sb, "svgPianta(doc,'misure')");
+  check('Pianta: stanze→locali, porte, messa in scala e PDF', collegati && nonPrezzata && scalaOk && near(pareti, 46.92) && pdfOk && svgMis.includes('data-room="1"'),
+    JSON.stringify({ r1, nonPrezzata, esito, st, pareti, pdfOk }));
+} catch (e) { check('Pianta: stanze→locali, porte, messa in scala e PDF', false, e.message); }
 
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);

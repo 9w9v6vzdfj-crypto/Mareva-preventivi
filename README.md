@@ -18,8 +18,16 @@ sole dalle misure** (m² di pareti, soffitto o pavimento). Nella scheda lavori:
   scorrevole, fissa, quote in mm); la loro superficie è tolta dalle pareti;
 - **lavorazioni scritte a mano** (quantità, unità, prezzo) e **note** del locale.
 
-"Copia su tutti i locali" ripete lavori e impianti in ogni stanza. In arrivo:
-partire da una **pianta disegnata col dito** al posto dell'elenco dei locali.
+"Copia su tutti i locali" ripete lavori e impianti in ogni stanza.
+
+Si può partire **disegnando la pianta col dito** (`pianta.js`, foglio a tutto
+schermo): le linee storte vengono raddrizzate e agganciate, ogni stanza chiusa
+diventa un locale del preventivo; si tocca una stanza per nome e misure, un
+muro per porte e finestre (tolte dalle pareti di entrambi i lati; entrano nei
+lavori solo se gli si dà un prezzo). Quando tutte le stanze hanno le misure la
+pianta **si mette in scala da sola** (minimi quadrati sulle linee della
+pianta). C'è anche la vista 3D (Three.js da CDN, caricato solo se serve). La
+pianta 2D compare nei passi Misure e Lavori e in testa al PDF.
 
 I preventivi della versione precedente (a mestieri) restano in archivio ma non
 si aprono più: si possono solo eliminare.
@@ -33,7 +41,8 @@ Pages).
 |---|---|
 | `index.html` | Struttura delle pagine (home, preventivo, archivio, impresa) |
 | `app.js` | Auth, store, sync cloud, archivio, backup, abbonamento, guida, stampa PDF |
-| `preventivo.js` | Il preventivo a passi: modello dati, calcoli, schede dei locali, PDF |
+| `preventivo.js` | Il preventivo a passi: modello dati, calcoli, schede dei locali, pianta 2D, PDF |
+| `pianta.js` | Il foglio di disegno: riconoscimento stanze, misure, porte/finestre, messa in scala, 3D |
 | `style.css` | Stili |
 | `sw.js` | Service worker (offline + aggiornamenti) |
 | `manifest.json`, `icon-*.png` | Installazione PWA |
@@ -71,10 +80,11 @@ node test-app.js
 Regola: **non si rilascia se non è tutto verde**. Il workflow GitHub Actions
 (`.github/workflows/test.yml`) esegue la suite su ogni push e pull request.
 
-- I test caricano `app.js` + `preventivo.js` in una sandbox (`node:vm`) con
+- I test caricano `app.js` + `preventivo.js` + `pianta.js` in una sandbox (`node:vm`) con
   stub del DOM: avvio con memoria vuota/corrotta/vecchio formato, calcoli
   (superfici, infissi, totali), contenuti e determinismo del PDF, escape HTML,
-  salvataggio e listino, backup, sync, guida, abbonamento, isolamento account.
+  salvataggio e listino, backup, sync, guida, abbonamento, isolamento account,
+  pianta senza schermo (stanze→locali, porte, messa in scala, PDF).
 
 ## Rilascio
 

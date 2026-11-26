@@ -235,6 +235,131 @@
   </div>
 </div>
 
+<!-- ═══ PIANTA: foglio di disegno a tutto schermo (pianta.js) ═══ -->
+<div id="piantaOv" hidden>
+<canvas id="cv" aria-label="Foglio di disegno: disegna le pareti con il dito"></canvas>
+
+<header class="pz-top pz-top2d">
+  <button class="pz-brand pz-back" id="btnFine" type="button">✓ Fine</button>
+  <div class="pz-brand pz-titolo">Pianta</div>
+</header>
+
+<div id="v3d" hidden>
+  <div id="v3dCanvas"></div>
+  <header class="pz-top">
+    <button class="pz-brand pz-back" id="btn2d" type="button">← Pianta</button>
+    <div class="pz-hint3d"><b>Tocca una parete</b> per porte e finestre</div>
+  </header>
+</div>
+
+<div class="pz-toast" id="toast" hidden></div>
+
+<div class="pz-menu" id="menu" hidden>
+  <button class="pz-mi" id="mi3d" type="button">Guarda in 3D</button>
+  <button class="pz-mi" id="miFit" type="button">Centra il disegno</button>
+  <button class="pz-mi" id="miScala" type="button">Metti in scala</button>
+  <button class="pz-mi" id="miAperture" type="button">Vani porta: dividono i locali ✓</button>
+  <button class="pz-mi" id="miHelp" type="button">Come si usa</button>
+  <button class="pz-mi pz-warn" id="miClear" type="button">Cancella tutto</button>
+</div>
+
+<div class="pz-pop" id="pop" hidden role="menu">
+  <div class="pz-pt" id="popT">Muro</div>
+  <button type="button" data-p="porta" role="menuitem"><svg viewBox="0 0 24 24"><path d="M5 21V4h10v17"/><path d="M3 21h14"/><circle cx="12" cy="13" r=".6"/></svg>Aggiungi porta</button>
+  <button type="button" data-p="finestra" role="menuitem"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M12 4v16M4 12h16"/></svg>Aggiungi finestra</button>
+  <button type="button" data-p="del" class="pz-warn" role="menuitem"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Elimina muro</button>
+</div>
+
+<section class="pz-drawer" id="drawer" aria-label="Computo dei locali">
+  <div class="pz-dock">
+    <button class="pz-ib" id="btnUndo" type="button" aria-label="Annulla" title="Annulla (Ctrl+Z)">
+      <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+    </button>
+    <button class="pz-ib" id="btnRedo" type="button" aria-label="Ripeti" title="Ripeti (Ctrl+Y)">
+      <svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+    </button>
+    <button class="pz-handle" id="handle" type="button" aria-expanded="false" aria-controls="drawerBody">
+      <span class="pz-sum"><b id="sumMain">—</b><span id="sumSub">—</span></span>
+      <svg class="pz-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>
+    </button>
+    <button class="pz-ib" id="btnMore" type="button" aria-label="Altre azioni" aria-expanded="false" title="Altro">
+      <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>
+    </button>
+  </div>
+  <div class="pz-body" id="drawerBody" hidden>
+    <div id="rows"></div>
+    <div class="pz-totals" id="totals" hidden></div>
+  </div>
+</section>
+
+<div class="pz-modal" id="modal" hidden>
+  <form class="pz-card" id="form" role="dialog" aria-modal="true" aria-labelledby="mTitle" novalidate>
+    <div class="pz-card-head">
+      <h2 id="mTitle">Stanza</h2>
+      <button type="button" class="pz-x" id="mClose" aria-label="Chiudi">×</button>
+    </div>
+    <label class="pz-f"><span>Nome</span><input id="fName" autocomplete="off" maxlength="30"></label>
+    <div class="pz-chips" id="chips"></div>
+    <div class="pz-dims">
+      <label class="pz-f"><span>Lungh. ↔ m</span><input id="fL" inputmode="decimal" autocomplete="off" placeholder="4,20"></label>
+      <label class="pz-f"><span>Largh. ↕ m</span><input id="fW" inputmode="decimal" autocomplete="off" placeholder="3,60"></label>
+      <label class="pz-f"><span>Altezza m</span><input id="fH" inputmode="decimal" autocomplete="off" placeholder="2,70"></label>
+    </div>
+    <div class="pz-res">
+      <div><span>Pavimento</span><b id="rFloor">—</b></div>
+      <div><span>Soffitto</span><b id="rCeil">—</b></div>
+      <div><span>Pareti</span><b id="rWalls">—</b></div>
+      <div><span>Perimetro · battiscopa</span><b id="rPer">—</b></div>
+    </div>
+    <div class="pz-actions">
+      <button type="button" class="pz-btn" id="mCancel">Annulla</button>
+      <button type="submit" class="pz-btn pz-primary">Salva misure</button>
+    </div>
+  </form>
+</div>
+
+<div class="pz-modal" id="infModal" hidden>
+  <form class="pz-card" id="infForm" role="dialog" aria-modal="true" aria-labelledby="iTitle" novalidate>
+    <div class="pz-card-head">
+      <h2 id="iTitle">Porta o finestra</h2>
+      <button type="button" class="pz-x" id="iClose" aria-label="Chiudi">×</button>
+    </div>
+    <div class="pz-chips" id="infTipi"></div>
+    <div class="pz-dims">
+      <label class="pz-f"><span>Largh. m</span><input id="iW" inputmode="decimal" autocomplete="off"></label>
+      <label class="pz-f"><span>Altezza m</span><input id="iH" inputmode="decimal" autocomplete="off"></label>
+      <label class="pz-f"><span>Da terra m</span><input id="iS" inputmode="decimal" autocomplete="off"></label>
+    </div>
+    <p class="pz-scalanote" id="iInfo">—</p>
+    <div class="pz-actions">
+      <button type="button" class="pz-btn pz-del" id="iDel" hidden>Elimina</button>
+      <button type="button" class="pz-btn" id="iCancel">Annulla</button>
+      <button type="submit" class="pz-btn pz-primary">Salva</button>
+    </div>
+  </form>
+</div>
+
+<div class="pz-modal" id="helpModal" hidden>
+  <div class="pz-card" role="dialog" aria-modal="true" aria-labelledby="hTitle">
+    <div class="pz-card-head">
+      <h2 id="hTitle">Come si usa</h2>
+      <button type="button" class="pz-x" id="hClose" aria-label="Chiudi">×</button>
+    </div>
+    <ul class="pz-help">
+      <li><b>Disegna</b><span>Traccia le pareti col dito. Mentre disegni vedi in blu come le raddrizzo; il pallino indica dove si aggancia.</span></li>
+      <li><b>Stanza</b><span>Quando si chiude si colora. Toccala per darle un nome e le misure.</span></li>
+      <li><b>Muro</b><span>Tocca un muro per aggiungere una porta, una finestra o per eliminarlo.</span></li>
+      <li><b>2 dita</b><span>Spostano il foglio e fanno lo zoom. Al computer: rotellina e Maiusc + trascina.</span></li>
+      <li><b>↶ ↷</b><span>Annulla e Ripeti, sempre in basso: prova senza paura.</span></li>
+      <li><b>In scala</b><span>Quando tutte le stanze hanno le misure, la pianta si mette in scala da sola.</span></li>
+      <li><b>⋯ Altro</b><span>Vista 3D, centra il disegno, cancella tutto.</span></li>
+      <li><b>✓ Fine</b><span>Torni al preventivo: ogni stanza è già un locale, con le sue misure.</span></li>
+    </ul>
+    <div class="pz-actions"><button type="button" class="pz-btn pz-primary" id="hOk">Ho capito</button></div>
+  </div>
+</div>
+</div>
+
 <!-- SCHEDA DEL LOCALE (misure o lavori) -->
 <div class="wz-sheet-bg" id="wzSheetBg" style="display:none"><div class="wz-sheet" id="wzSheet" role="dialog" aria-modal="true"></div></div>
 <div class="wz-toast" id="wzToast" style="display:none"></div>
@@ -263,5 +388,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="app.js"></script>
 <script src="preventivo.js"></script>
+<script src="pianta.js"></script>
 </body>
 </html>
