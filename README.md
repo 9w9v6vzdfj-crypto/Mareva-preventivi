@@ -1,26 +1,36 @@
 # Facile Preventivo
 
-PWA per artigiani (imbianchino, muratore, elettricista, idraulico,
-serramentista e mestiere libero) per gestire **sopralluoghi** e **preventivi**
-dal telefono: rilievo degli ambienti, lavorazioni con prezzi (e quantità per i
-mestieri tecnici), sconto/IVA, PDF stampabile con intestazione dell'impresa,
-archivio con stati (bozza / inviato / accettato / rifiutato) e duplicazione
-dei preventivi per lavori simili.
+PWA per imprese edili e artigiani per fare **preventivi** dal telefono, in
+quattro passi sempre uguali: **Locali → Misure → Lavori → Preventivo**, poi un
+PDF stampabile con l'intestazione dell'impresa. Archivio con stati (bozza /
+inviato / accettato / rifiutato) e duplicazione per lavori simili.
 
-Il **muratore** può lavorare da impresa generale: nel documento si attivano i
-"moduli" degli altri mestieri (imbiancatura, elettrico, idraulico, serramenti)
-e le loro voci si aggiungono agli elenchi dei locali mantenendo le regole del
-mestiere d'origine (quantità × prezzo per le voci tecniche, sezione serramenti
-col disegno). Ogni voce importata ricorda la sua categoria (`loc.lavoriCat`) e
-il PDF mostra il **riepilogo per categoria** con i subtotali.
+Un locale, una scheda: al passo Misure si scrivono lunghezza, larghezza e
+altezza; al passo Lavori si spuntano le lavorazioni e **le quantità arrivano da
+sole dalle misure** (m² di pareti, soffitto o pavimento). Nella scheda lavori:
 
-Per il **serramentista** l'app genera il disegno tecnico in prospetto di
-finestre e porte (SVG, funzione pura `disegnoSerramento`): tipo, misure in mm,
-numero di ante e apertura per anta (battente dx/sx, vasistas, anta-ribalta,
-scorrevole, fissa), con la convenzione professionale — "V" tratteggiata col
-vertice sul lato cerniere, vasistas col vertice in basso, freccia per gli
-scorrevoli — e le quote. Il disegno compare nella card del locale e nei PDF
-di sopralluogo e preventivo.
+- **lavori più usati** (demolizioni, massetto, pavimenti, intonaco,
+  tinteggiature, controsoffitto, smaltimento) con prezzo al m²; l'ultimo prezzo
+  usato viene ricordato nel *listino* e proposto nei preventivi successivi;
+- **impianti** elettrico e idraulico come voce a corpo, con dettagli facoltativi;
+- **infissi** col disegno tecnico in prospetto (funzione pura `disegnoInfisso`:
+  "V" tratteggiata col vertice sul lato cerniere, vasistas, anta-ribalta,
+  scorrevole, fissa, quote in mm); la loro superficie è tolta dalle pareti;
+- **lavorazioni scritte a mano** (quantità, unità, prezzo) e **note** del locale.
+
+"Copia su tutti i locali" ripete lavori e impianti in ogni stanza.
+
+Si può partire **disegnando la pianta col dito** (`pianta.js`, foglio a tutto
+schermo): le linee storte vengono raddrizzate e agganciate, ogni stanza chiusa
+diventa un locale del preventivo; si tocca una stanza per nome e misure, un
+muro per porte e finestre (tolte dalle pareti di entrambi i lati; entrano nei
+lavori solo se gli si dà un prezzo). Quando tutte le stanze hanno le misure la
+pianta **si mette in scala da sola** (minimi quadrati sulle linee della
+pianta). C'è anche la vista 3D (Three.js da CDN, caricato solo se serve). La
+pianta 2D compare nei passi Misure e Lavori e in testa al PDF.
+
+I preventivi della versione precedente (a mestieri) restano in archivio ma non
+si aprono più: si possono solo eliminare.
 
 ## Com'è fatta
 
@@ -29,19 +39,21 @@ Pages).
 
 | File | Ruolo |
 |---|---|
-| `index.html` | Struttura delle pagine (dashboard, sopralluogo, preventivo, archivio, impostazioni) |
-| `app.js` | Tutta la logica: auth, store, mestieri, form, calcoli, PDF, backup |
+| `index.html` | Struttura delle pagine (home, preventivo, archivio, impresa) |
+| `app.js` | Auth, store, sync cloud, archivio, backup, abbonamento, guida, stampa PDF |
+| `preventivo.js` | Il preventivo a passi: modello dati, calcoli, schede dei locali, pianta 2D, PDF |
+| `pianta.js` | Il foglio di disegno: riconoscimento stanze, misure, porte/finestre, messa in scala, 3D |
 | `style.css` | Stili |
 | `sw.js` | Service worker (offline + aggiornamenti) |
 | `manifest.json`, `icon-*.png` | Installazione PWA |
-| `test-app.js`, `harness.js` | Test automatici (vedi sotto) |
+| `test-app.js` | Test automatici (vedi sotto) |
 
-Punti chiave di `app.js`:
+Punti chiave:
 
 - **`Store`** è l'unico punto di accesso ai dati (oggi `localStorage`); per il
   futuro passaggio al cloud basta cambiare lì dentro.
-- **`MESTIERI`** è la configurazione che guida UI e PDF (superficie, quantità,
-  modalità lavori): niente `if mestiere === ...` sparsi.
+- **Calcoli puri** in `preventivo.js` (`locSup`, `locRighe`, `docTotali`,
+  `buildPdfPrev`): usati da editor, PDF e test.
 - **`esc()` / `escJs()`**: escape HTML per ogni dato utente interpolato nei
   template; `escJs` per i valori dentro gli handler `onclick`/`onchange`.
 
@@ -68,12 +80,11 @@ node test-app.js
 Regola: **non si rilascia se non è tutto verde**. Il workflow GitHub Actions
 (`.github/workflows/test.yml`) esegue la suite su ogni push e pull request.
 
-- I test caricano `app.js` in una sandbox (`node:vm`) con stub del DOM:
-  avvio con memoria vuota/corrotta, roundtrip del backup, escape HTML.
-- `harness.js` genera i PDF di preventivo e sopralluogo su dati campione
-  deterministici e ne calcola gli hash: i PDF di **imbianchino** e
-  **muratore** devono restare identici al bit (baseline in `test-app.js`).
-  Se un giorno cambi volutamente quei PDF, aggiorna i valori in `BASELINE`.
+- I test caricano `app.js` + `preventivo.js` + `pianta.js` in una sandbox (`node:vm`) con
+  stub del DOM: avvio con memoria vuota/corrotta/vecchio formato, calcoli
+  (superfici, infissi, totali), contenuti e determinismo del PDF, escape HTML,
+  salvataggio e listino, backup, sync, guida, abbonamento, isolamento account,
+  pianta senza schermo (stanze→locali, porte, messa in scala, PDF).
 
 ## Rilascio
 
