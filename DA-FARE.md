@@ -20,7 +20,7 @@
 
 - **Pagamenti (Stripe)** — il codice è pronto e SPENTO: si attiva compilando
   `STRIPE_PREZZI` in `app.js`. Modello scelto: gratis fino a 3 preventivi
-  (sopralluoghi illimitati), poi abbonamento mensile o annuale. Passi:
+  poi abbonamento mensile o annuale. Passi:
   1. ⬜ **Firebase → piano Blaze** (pay-as-you-go; ai tuoi volumi ~0€,
      imposta un budget alert).
   2. ⬜ **Firebase Console → Extensions → "Run Payments with Stripe"**:

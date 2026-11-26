@@ -1,20 +1,14 @@
 // ============================================================
-//  Facile Preventivo — Test automatici (rete di sicurezza v1)
-//  Uso:  node test-app.js [index.html]
+//  Facile Preventivo — Test automatici
+//  Uso:  node test-app.js
 //  Regola: NON si rilascia se questo script non è 🟢 TUTTO VERDE.
 // ============================================================
 const fs = require('fs');
 const vm = require('vm');
-const { execSync } = require('child_process');
+const path = require('path');
+const crypto = require('crypto');
 
-const FILE = process.argv[2] || 'app.js';
-
-// --- Baseline PDF imbianchino/muratore (devono restare INVARIATI).
-// Se un giorno cambi VOLUTAMENTE questi due mestieri, aggiorna qui i valori.
-const BASELINE = {
-  imbianchino: { prev: 'c3669fa8d1c3b4ef', sop: 'acf8df2f06effb87' },
-  muratore:    { prev: 'ac04e5ef38a64924', sop: '006d91a777eab508' },
-};
+const FILES = ['app.js', 'preventivo.js'];
 
 let pass = 0, fail = 0;
 function check(name, ok, detail) {
@@ -24,181 +18,158 @@ function check(name, ok, detail) {
 
 // --- Carica l'app in una finta pagina (sandbox), con un dato localStorage iniziale.
 function loadApp(seed) {
-  const _txt = fs.readFileSync(FILE, 'utf8');
-  const code = FILE.endsWith('.html') ? _txt.match(/<script>([\s\S]*)<\/script>/)[1] : _txt;
+  const code = FILES.map(f => fs.readFileSync(path.join(__dirname, f), 'utf8')).join('\n;\n');
   const noop = () => {};
   const mk = (id) => ({
-    id, style: {}, checked: false, value: '', textContent: '', innerHTML: '',
+    id, style: {}, checked: false, value: '', textContent: '', innerHTML: '', dataset: {},
     classList: { add: noop, remove: noop, toggle: noop, contains: () => false },
     appendChild: noop, remove: noop, click: noop, setAttribute: noop,
     addEventListener: noop, focus: noop, closest: () => null,
     querySelector: () => null, querySelectorAll: () => [],
   });
+  const els = {};
   const sb = {
     console, Math, Date, JSON, parseFloat, parseInt, isNaN, isFinite,
-    Number, String, Array, Object, encodeURIComponent, decodeURIComponent,
+    Number, String, Array, Object, Map, Set, encodeURIComponent, decodeURIComponent,
     setTimeout: noop, clearTimeout: noop, alert: noop, confirm: () => true,
   };
-  sb.document = { getElementById: mk, createElement: () => mk('x'), querySelectorAll: () => [], querySelector: () => null, addEventListener: noop, body: mk('body') };
+  sb.document = { getElementById: (id) => (els[id] = els[id] || mk(id)), createElement: () => mk('x'), querySelectorAll: () => [], querySelector: () => null, addEventListener: noop, body: mk('body') };
   sb.window = sb; sb.window.addEventListener = noop; sb.scrollTo = noop; sb.navigator = {}; sb.globalThis = sb;
+  sb.history = { pushState: noop, back: noop, state: null };
   sb.localStorage = { getItem: (k) => (k in seed ? seed[k] : null), setItem: (k, v) => { seed[k] = String(v); }, removeItem: (k) => { delete seed[k]; } };
   sb.Blob = function (p) { this._ = p.join(''); };
   sb.URL = { createObjectURL: (b) => { sb._json = b._; return 'blob:x'; }, revokeObjectURL: noop };
   sb.FileReader = function () { this.readAsText = () => { this.result = sb._json; if (this.onload) this.onload(); }; };
+  sb._els = els;
   vm.createContext(sb);
   vm.runInContext(code, sb);
   return sb;
 }
 // Simula l'avvio dell'app (quello che gira al caricamento della pagina).
-function boot(sb) {
-  sb.renderMestiereSelector(); sb.applyMestiereUI();
-  sb.resetForm(true); sb.sResetForm(true);
-  sb.aggStats(); sb.caricaImpresa();
-}
+function boot(sb) { sb.wzInit(); sb.wzNuovo(); sb.aggStats(); sb.caricaImpresa(); }
+const run = (sb, js) => vm.runInContext(js, sb);
+const near = (a, b) => Math.abs(a - b) < 1e-6;
 
-console.log('— Test su ' + FILE + ' —\n');
+// Documento d'esempio deterministico (usato da più test).
+const DOC = {
+  v: 2, id: 1, numero: '📄 P–2026/001', data: '10/03/2026', dataISO: '2026-03-10T09:00:00.000Z', stato: 'bozza', mod: 1, via: 'manuale',
+  cliente: { nome: 'Mario Rossi', tel: '333', email: '', indirizzo: 'Via Roma 1' },
+  prezzi: { dp: 12, ms: 18, pp: 30, ir: 22, tp: 6.5, ts: 7, cs: 35, sm: 250 },
+  sconto: 5, iva: 22, validita: 30, totale: 0,
+  locali: [
+    { id: 1, nome: 'Soggiorno', L: 7, W: 5, H: 2.7, lav: { tp: true, ts: true }, imp: {}, inf: [], man: [], note: '' },
+    { id: 2, nome: 'Bagno', L: 2.5, W: 2, H: 2.7, lav: { tp: true, ts: true, pp: true },
+      imp: { id: { on: true, p: 1800, nota: '5 punti acqua' } },
+      inf: [{ tipo: 'finestra', lung: 600, alt: 900, ante: 1, apr: 'ribalta', prezzo: 420 }],
+      man: [{ nome: 'Posa rivestimento', q: 18, u: 'm²', p: 35 }, { nome: '', q: 3, u: 'pz', p: 99 }],
+      note: 'Piastrelle scelte dal cliente' },
+    { id: 3, nome: 'Ripostiglio', L: 0, W: 0, H: 2.7, lav: { tp: true, sm: true }, imp: {}, inf: [], man: [], note: '' },
+  ],
+};
+
+console.log('— Test su ' + FILES.join(' + ') + ' —\n');
 
 // 1) Avvio con memoria VUOTA (utente nuovo): non deve crashare.
 try { boot(loadApp({})); check('Avvio con memoria vuota (utente nuovo)', true); }
 catch (e) { check('Avvio con memoria vuota (utente nuovo)', false, e.message); }
 
-// 2) Avvio con dati CORROTTI in memoria: non deve crashare.
+// 2) Avvio con dati CORROTTI o di vecchie versioni: non deve crashare.
 try {
-  boot(loadApp({ mv_prev: '{rotto', mv_sop: '[[[', mv_impresa: 'null', mv_lavori_custom: 'xyz', mv_mestiere: 'idraulico' }));
-  check('Avvio con dati corrotti in memoria', true);
-} catch (e) { check('Avvio con dati corrotti in memoria', false, e.message); }
+  const sb = loadApp({ mv_prev: '{rotto', mv_impresa: 'null', mv_listino: '[1,2]', mv_del: 'x' });
+  boot(sb);
+  const sb2 = loadApp({ mv_prev: JSON.stringify([{ id: 5, numero: 'P-1', mestiere: 'elettricista', locali: [{ nome: 'Sala', lavori: ['Punto luce'] }] }]) });
+  boot(sb2);
+  const html = run(sb2, 'prevItemHTML(preventivi[0], false)');
+  const apre = run(sb2, 'wzApri(5)');
+  check('Avvio con dati corrotti / vecchio formato', html.includes('Vecchia versione') && apre === false, 'vecchio documento non gestito');
+} catch (e) { check('Avvio con dati corrotti / vecchio formato', false, e.message); }
 
-// 3) Backup: esporta → svuota → importa, i dati devono tornare identici.
+// 3) Calcoli: superfici, infissi tolti dalle pareti, quantità automatiche, totali.
 try {
-  const seed = {
-    mv_prev: JSON.stringify([{ id: 1, numero: 'P-1', mestiere: 'elettricista', locali: [{ id: 0, nome: 'Sala', lavori: ['Punto luce'], lavoriQta: { 'Punto luce': 5 }, lavoriPrezzi: { 'Punto luce': 30 }, condizioni: ['Rifacimento totale'] }] }]),
-    mv_sop: JSON.stringify([{ id: 9, numero: 'S-1', convertito: true }]),
-    mv_impresa: JSON.stringify({ nome: 'MarEva', piva: '123' }),
-    mv_mestiere: 'elettricista',
-    mv_lavori_custom: JSON.stringify({ elettricista: ['Voce mia'] }),
-  };
-  const before = JSON.stringify(seed);
-  const sb = loadApp(seed);
-  sb.esportaBackup();
-  ['mv_prev', 'mv_sop', 'mv_impresa', 'mv_mestiere', 'mv_lavori_custom'].forEach((k) => delete seed[k]);
-  sb.importaBackup({ name: 'b.json' });
-  const after = JSON.stringify({ mv_prev: seed.mv_prev, mv_sop: seed.mv_sop, mv_impresa: seed.mv_impresa, mv_mestiere: seed.mv_mestiere, mv_lavori_custom: seed.mv_lavori_custom });
-  check('Backup: esporta → importa restituisce dati identici', before === after, 'i dati non coincidono');
-} catch (e) { check('Backup: esporta → importa restituisce dati identici', false, e.message); }
+  const sb = loadApp({});
+  const d = sb.normalizzaDoc(JSON.parse(JSON.stringify(DOC)));
+  const bagno = d.locali[1];
+  const s = sb.locSup(bagno);
+  // pareti lorde 2×(2,5+2)×2,7 = 24,3 − finestra 0,6×0,9 = 0,54 → 23,76
+  const supOk = near(s.lordo, 24.3) && near(s.ded, 0.54) && near(s.pareti, 23.76) && near(s.pavimento, 5);
+  // Bagno: 23,76×6,5 + 5×7 + 5×30 + 1800 + 420 + 18×35 (la riga senza nome non conta)
+  const totBagno = 23.76 * 6.5 + 35 + 150 + 1800 + 420 + 630;
+  const totSogg = 64.8 * 6.5 + 35 * 7;
+  const totRip = 250; // senza misure: solo lo smaltimento a corpo
+  const T = sb.docTotali(d);
+  const sub = totBagno + totSogg + totRip, imp = sub * 0.95;
+  const locTot = run(sb, 'locTot');
+  const ok = supOk && near(locTot(bagno, d.prezzi), totBagno) && near(locTot(d.locali[2], d.prezzi), totRip)
+    && near(T.sub, sub) && near(T.imp, imp) && near(T.tot, imp * 1.22) && sb.locRighe(bagno, d.prezzi).length === 6;
+  check('Calcoli: superfici, infissi, quantità automatiche e totali', ok, JSON.stringify({ s, T }));
+} catch (e) { check('Calcoli: superfici, infissi, quantità automatiche e totali', false, e.message); }
 
-// 4) PDF imbianchino/muratore INVARIATI (anti-regressione), via harness.js.
-function shaFromHarness(trade) {
-  const out = execSync(`node harness.js "${FILE}" ${trade} t`, { cwd: __dirname }).toString();
-  const prev = (out.match(/preventivo_pdf_sha=([0-9a-f]+)/) || [])[1];
-  const sop = (out.match(/sopralluogo_pdf_sha=([0-9a-f]+)/) || [])[1];
-  return { prev, sop };
-}
-for (const trade of ['imbianchino', 'muratore']) {
-  try {
-    const got = shaFromHarness(trade);
-    const want = BASELINE[trade];
-    const ok = got.prev === want.prev && got.sop === want.sop;
-    check('PDF ' + trade + ' invariato', ok, `preventivo ${got.prev} (atteso ${want.prev}), sopralluogo ${got.sop} (atteso ${want.sop})`);
-  } catch (e) { check('PDF ' + trade + ' invariato', false, e.message); }
-}
+// 4) PDF: contiene cliente, locali, voci, note, disegno dell'infisso e totale;
+//    è deterministico (stesso documento → stesso HTML).
+try {
+  const sb = loadApp({ mv_impresa: JSON.stringify({ nome: 'Rossi Costruzioni', piva: '123' }) });
+  boot(sb);
+  const h1 = sb.buildPdfPrev(DOC), h2 = sb.buildPdfPrev(DOC);
+  const T = sb.docTotali(sb.normalizzaDoc(JSON.parse(JSON.stringify(DOC))));
+  const ok = h1 === h2 && h1.includes('Rossi Costruzioni') && h1.includes('Mario Rossi') && h1.includes('P–2026/001')
+    && h1.includes('Soggiorno') && h1.includes('Impianto idraulico') && h1.includes('5 punti acqua')
+    && h1.includes('Finestra 600×900 mm') && h1.includes('stroke-dasharray') && h1.includes('Posa rivestimento')
+    && h1.includes('Piastrelle scelte dal cliente') && h1.includes(run(sb, 'prEur')(T.tot)) && h1.includes('Sconto 5%');
+  const sha = crypto.createHash('sha256').update(h1).digest('hex').slice(0, 16);
+  check('PDF del preventivo: contenuti e determinismo (sha ' + sha + ')', ok, 'contenuto mancante');
+} catch (e) { check('PDF del preventivo: contenuti e determinismo', false, e.message); }
 
-// 5) Escape HTML: nome locale / materiali con caratteri speciali non devono
-//    rompere il markup della card (XSS via rinomina locale o backup importato).
+// 5) Escape HTML: nomi e note con caratteri speciali non rompono il markup.
 try {
   const sb = loadApp({});
   boot(sb);
-  const evil = {
-    id: 0, nome: '"><img src=x onerror=1>', lung: 4, larg: 3, h: 2.7,
-    lavori: [], lavoriPrezzi: {}, lavoriQta: {},
-    materiali: '</textarea><script>alert(1)<\/script>',
-    condizioni: [], condNote: '', incPareti: true, incSoffitto: true, _open: true,
-  };
-  const html = sb.buildLocCard('s', evil);
-  const ok = !html.includes('"><img') && !html.includes('<script>');
-  check('Escape HTML nei template dei locali', ok, 'markup non escapato');
-} catch (e) { check('Escape HTML nei template dei locali', false, e.message); }
+  const evil = JSON.parse(JSON.stringify(DOC));
+  evil.cliente.nome = '"><img src=x onerror=1>';
+  evil.locali[0].nome = '<script>alert(1)</script>';
+  evil.locali[1].note = '</td><b>x';
+  evil.locali[1].man[0].nome = '<i onmouseover=1>';
+  const pdf = sb.buildPdfPrev(evil);
+  const item = sb.prevItemHTML(evil, false);
+  run(sb, 'doc=normalizzaDoc(' + JSON.stringify(evil) + '); wzStep=1; wzRender(); wzStep=4; wzRender();');
+  const scr = run(sb, 'wzSchermata()');
+  const bad = s => s.includes('"><img') || s.includes('<script>') || s.includes('</td><b>') || s.includes('<i onmouseover');
+  check('Escape HTML: PDF, archivio ed editor', !bad(pdf) && !bad(item) && !bad(scr), 'markup non escapato');
+} catch (e) { check('Escape HTML: PDF, archivio ed editor', false, e.message); }
 
-// 6) Serramentista: totale (qta × prezzo dei serramenti + voci), disegno SVG
-//    con simboli di apertura e quote, e PDF preventivo che li include.
+// 6) Editor: salvataggio (serve il nome), listino dei prezzi ricordato, riapertura.
 try {
-  const sb = loadApp({ mv_mestiere: 'serramentista' });
+  const seed = {};
+  const sb = loadApp(seed);
   boot(sb);
-  const loc = {
-    id: 0, nome: 'Soggiorno', lavori: ['Posa in opera'], lavoriPrezzi: { 'Posa in opera': 100 }, lavoriQta: { 'Posa in opera': 2 },
-    serramenti: [
-      { id: 0, tipo: 'finestra', lung: 1200, alt: 1400, ante: 2, aperture: ['battente-sx', 'ribalta-dx'], qta: 2, prezzo: 450, note: 'PVC bianco' },
-      { id: 1, tipo: 'portafinestra', lung: 1400, alt: 2300, ante: 2, aperture: ['vasistas', 'battente-dx'], qta: 1, prezzo: 820, note: '' },
-    ],
-    condizioni: [], condNote: '', materiali: '',
-  };
-  // 2×450 + 820 (serramenti) + 2×100 (posa) = 1920
-  const somma = sb.sommaLavoriLoc(loc, 'serramentista');
-  const svg = sb.disegnoSerramento(loc.serramenti[0]);
-  sb.mestiere = 'serramentista';
-  const d = {
-    id: 1, numero: '📄 P–2026/001', data: '10/03/2026', dataISO: '2026-03-10T09:00:00.000Z', stato: 'bozza',
-    mestiere: 'serramentista', tipoStruttura: 'Appartamento',
-    cliente: { nome: 'Mario', cognome: 'Rossi' }, locali: [loc], supTot: 0,
-    optMdoPerLocale: false, optCondPerLocale: false, mdoGenerale: 0, sconto: 0, iva: 22,
-    condizioniGen: [], condNoteGen: '', note: { libere: '' }, validita: '30', totale: 0,
-  };
-  const html = sb.buildAntHTML(d);
-  const ok = Math.abs(somma - 1920) < 1e-9
-    && svg.includes('<svg') && svg.includes('stroke-dasharray')   // simboli apertura tratteggiati
-    && svg.includes('>1200<') && svg.includes('>1400<')           // quote in mm
-    && html.includes('<svg') && html.includes('€1920.00');        // disegno + subtotale nel PDF
-  check('Serramentista: totale, disegno SVG e PDF', ok, `somma=${somma}`);
-} catch (e) { check('Serramentista: totale, disegno SVG e PDF', false, e.message); }
+  const senzaNome = run(sb, 'wzSalvaOra()');
+  run(sb, `doc.cliente.nome='Anna'; wzAddLocale('Cucina'); doc.locali[0].L=4; doc.locali[0].W=3; doc.locali[0].lav.tp=true;
+           wzAggiornaListino('tp', 9); doc.prezzi.tp=9; wzSalvaOra();`);
+  const salvati = JSON.parse(seed.mv_prev);
+  const listino = JSON.parse(seed.mv_listino);
+  const nuovo = run(sb, 'wzNuovo(); doc.prezzi.tp');
+  const riapre = run(sb, `wzApri(${salvati[0].id}) && doc.cliente.nome==='Anna' && wzStep===4`);
+  const ok = senzaNome === false && salvati.length === 1 && salvati[0].v === 2 && near(salvati[0].totale, 37.8 * 9 * 1.22)
+    && listino.tp === 9 && nuovo === 9 && riapre === true;
+  check('Editor: salvataggio, listino prezzi e riapertura', ok, JSON.stringify({ senzaNome, n: salvati.length, tot: salvati[0] && salvati[0].totale, listino, nuovo, riapre }));
+} catch (e) { check('Editor: salvataggio, listino prezzi e riapertura', false, e.message); }
 
-// 7) Moduli: muratore con voci elettrico (qta × prezzo) e serramenti.
-//    Totale corretto e PDF con riepilogo per categoria.
+// 7) Backup: esporta → svuota → importa, i dati devono tornare identici.
 try {
-  const sb = loadApp({ mv_mestiere: 'muratore' });
-  boot(sb);
-  const loc = {
-    id: 0, nome: 'Bagno',
-    lavori: ['Massetto / sottofondo', 'Punto luce'],
-    lavoriPrezzi: { 'Massetto / sottofondo': 500, 'Punto luce': 30 },
-    lavoriQta: { 'Punto luce': 4 },
-    lavoriCat: { 'Punto luce': 'elettricista' },
-    serramenti: [{ id: 0, tipo: 'finestra', lung: 600, alt: 600, ante: 1, aperture: ['vasistas'], qta: 1, prezzo: 400, note: '' }],
-    lung: 2.5, larg: 2, h: 2.7, condizioni: [], condNote: '', materiali: '',
+  const seed = {
+    mv_prev: JSON.stringify([DOC]),
+    mv_impresa: JSON.stringify({ nome: 'MarEva', piva: '123' }),
+    mv_listino: JSON.stringify({ tp: 8 }),
   };
-  // 500 (massetto) + 4×30 (punti luce) + 400 (finestra) = 1020
-  const somma = sb.sommaLavoriLoc(loc, 'muratore');
-  sb.mestiere = 'muratore';
-  const d = {
-    id: 1, numero: '📄 P–2026/002', data: '10/03/2026', dataISO: '2026-03-10T09:00:00.000Z', stato: 'bozza',
-    mestiere: 'muratore', tipoStruttura: 'Appartamento', moduli: ['elettricista', 'serramentista'],
-    cliente: { nome: 'Mario', cognome: 'Rossi' }, locali: [loc], supTot: 5,
-    optMdoPerLocale: false, optCondPerLocale: false, mdoGenerale: 0, sconto: 0, iva: 22,
-    condizioniGen: [], condNoteGen: '', note: { libere: '' }, validita: '30', totale: 0,
-  };
-  const html = sb.buildAntHTML(d);
-  const ok = Math.abs(somma - 1020) < 1e-9
-    && html.includes('Riepilogo per categoria')
-    && html.includes('Opere murarie') && html.includes('Impianto elettrico') && html.includes('Serramenti')
-    && html.includes('€120.00') && html.includes('€1020.00') && html.includes('<svg');
-  check('Moduli: muratore + elettrico + serramenti (totali e PDF)', ok, `somma=${somma}`);
-} catch (e) { check('Moduli: muratore + elettrico + serramenti (totali e PDF)', false, e.message); }
+  const before = JSON.stringify([seed.mv_prev, seed.mv_impresa, seed.mv_listino]);
+  const sb = loadApp(seed);
+  sb.esportaBackup();
+  ['mv_prev', 'mv_impresa', 'mv_listino'].forEach((k) => delete seed[k]);
+  sb.importaBackup({ name: 'b.json' });
+  const after = JSON.stringify([seed.mv_prev, seed.mv_impresa, seed.mv_listino]);
+  check('Backup: esporta → importa restituisce dati identici', before === after, after.slice(0, 200));
+} catch (e) { check('Backup: esporta → importa restituisce dati identici', false, e.message); }
 
-// 8) Cambio mestiere con auto-modulo: da imbianchino a muratore le voci
-//    restano come modulo 🎨 (prima venivano cancellate col confirm).
-try {
-  const sb = loadApp({ mv_mestiere: 'imbianchino' });
-  boot(sb);
-  vm.runInContext(`
-    locali.push({id:0,nome:'Camera',lung:4,larg:3,h:2.7,lavori:['Tutto bianco'],lavoriPrezzi:{'Tutto bianco':300},lavoriQta:{},serramenti:[],condizioni:[],condNote:'',materiali:''});
-    setMestiere('muratore');
-  `, sb);
-  const r = JSON.parse(vm.runInContext(
-    `JSON.stringify({m:mestiere,mod:pModuli,lav:locali[0].lavori,cat:locali[0].lavoriCat,tot:sommaLavoriLoc(locali[0],'muratore')})`, sb));
-  const ok = r.m === 'muratore' && r.mod.includes('imbianchino') && r.lav.length === 1
-    && r.cat && r.cat['Tutto bianco'] === 'imbianchino' && Math.abs(r.tot - 300) < 1e-9;
-  check('Cambio mestiere: voci conservate come modulo (no perdita dati)', ok, JSON.stringify(r));
-} catch (e) { check('Cambio mestiere: voci conservate come modulo (no perdita dati)', false, e.message); }
-
-// 9) Sync: fusione documenti per id (vince il piu' recente, pari merito al
+// 8) Sync: fusione documenti per id (vince il piu' recente, pari merito al
 //    locale) e tombstone (gli eliminati non "risorgono" dal cloud).
 try {
   const sb = loadApp({});
@@ -206,7 +177,7 @@ try {
   const cloud = [{ id: 2, mod: 9, n: 'b-cloud' }, { id: 3, mod: 1, n: 'c-cloud' }, { id: 4, mod: 7, n: 'd-cloud' }];
   const fusi = sb.mergeById(locale, cloud);
   const byId = Object.fromEntries(fusi.map(x => [x.id, x.n]));
-  const dels = [{ id: '3', ts: 2 }, { id: '4', ts: 3 }]; // 3 eliminato dopo la modifica, 4 rimodificato dopo (mod 7 > ts 3)
+  const dels = [{ id: '3', ts: 2 }, { id: '4', ts: 3 }];
   const vivi = sb.applicaTombstone(fusi, dels).map(x => x.id).sort().join(',');
   const delFusi = sb.mergeDel([{ id: '9', ts: 1 }], [{ id: '9', ts: 4 }, { id: '8', ts: 2 }]);
   const ok = fusi.length === 4
@@ -216,73 +187,80 @@ try {
   check('Sync: fusione per id e tombstone eliminazioni', ok, `fusi=${JSON.stringify(byId)} vivi=${vivi}`);
 } catch (e) { check('Sync: fusione per id e tombstone eliminazioni', false, e.message); }
 
-// 10) Guida al primo utilizzo: ogni passo punta a un elemento che esiste
-//     davvero in index.html, e avvio/avanzamento/chiusura non crashano.
+// 9) Guida al primo utilizzo: ogni passo punta a un elemento che esiste
+//    davvero in index.html, e avvio/avanzamento/chiusura non crashano.
 try {
   const sb = loadApp({});
   boot(sb);
-  const html = fs.readFileSync(require('path').join(__dirname, 'index.html'), 'utf8');
-  const tuttiPassi = JSON.parse(vm.runInContext('JSON.stringify([].concat(GUIDA_PASSI, GUIDA_SOPRALLUOGO, GUIDA_PREVENTIVO))', sb));
-  const targetsOk = tuttiPassi.every(p => !p.el || html.includes('id="' + p.el + '"'));
-  const mockOk = ['flusso', 'sopralluogo', 'preventivo', 'pdf'].every(m => vm.runInContext(`mockGuida('${m}')`, sb).includes('<svg'));
-  vm.runInContext('Guida.avvia(); Guida.avanti(); Guida.chiudi();', sb);
-  vm.runInContext("Guida.avvia(GUIDA_SOPRALLUOGO,'mv_guida_s'); Guida.chiudi();", sb);
-  const vista = vm.runInContext("Store.getGuidaVista() && Store.getGuidaVista('mv_guida_s')", sb);
-  check('Guide: passi validi (3 tour), mockup e ciclo di vita', tuttiPassi.length >= 17 && targetsOk && mockOk && vista === true,
-    `passi=${tuttiPassi.length} targetsOk=${targetsOk} mockOk=${mockOk} vista=${vista}`);
-} catch (e) { check('Guide: passi validi (3 tour), mockup e ciclo di vita', false, e.message); }
+  const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+  const passi = JSON.parse(run(sb, 'JSON.stringify(GUIDA_PASSI)'));
+  const targetsOk = passi.every(p => !p.el || html.includes('id="' + p.el + '"'));
+  const mockOk = ['flusso', 'preventivo', 'pdf'].every(m => run(sb, `mockGuida('${m}')`).includes('<svg'));
+  run(sb, 'Guida.avvia(); Guida.avanti(); Guida.chiudi();');
+  const vista = run(sb, 'Store.getGuidaVista()');
+  check('Guida: passi validi, mockup e ciclo di vita', passi.length >= 5 && targetsOk && mockOk && vista === true,
+    `passi=${passi.length} targetsOk=${targetsOk} mockOk=${mockOk} vista=${vista}`);
+} catch (e) { check('Guida: passi validi, mockup e ciclo di vita', false, e.message); }
 
-// 11) Abbonamento: gating spento di default (prezzi vuoti), limite e stato
+// 10) Abbonamento: gating spento di default (prezzi vuoti), limite e stato
 //     abbonato quando acceso, contatore che cresce e non si azzera.
 try {
   const sb = loadApp({});
   boot(sb);
-  const r1 = vm.runInContext('Abbo.gatingAttivo()===false && Abbo.puoCreare()===true', sb);
-  vm.runInContext(`
-    STRIPE_PREZZI.mensile='price_test';
-    localStorage.setItem('mv_stat', JSON.stringify({prevCreati:5}));
-  `, sb);
-  const r2 = vm.runInContext('Abbo.gatingAttivo()===true && Abbo.puoCreare()===false && Abbo.rimasti()===0', sb);
-  vm.runInContext(`localStorage.setItem('mv_abbo', JSON.stringify({attivo:true, fine: Date.now()+86400000}));`, sb);
-  const r3 = vm.runInContext('Abbo.attivo()===true && Abbo.puoCreare()===true', sb);
-  vm.runInContext(`localStorage.setItem('mv_abbo', JSON.stringify({attivo:true, fine: Date.now()-1000}));`, sb);
-  const r4 = vm.runInContext('Abbo.attivo()===false && Abbo.puoCreare()===false', sb);
-  vm.runInContext('Abbo.registraCreazione()', sb);
-  const r5 = vm.runInContext('Abbo.usati()===6', sb);
-  // contatore per DISPOSITIVO: azzerare quello dell'account non basta
-  vm.runInContext(`localStorage.setItem('mv_stat', JSON.stringify({prevCreati:0})); localStorage.setItem('mv_abbo','{}');`, sb);
-  const r6 = vm.runInContext('Abbo.usati()===1 && Abbo.puoCreare()===true', sb);
-  vm.runInContext(`localStorage.setItem('mv_stat_dev', JSON.stringify({prevCreati:5}));`, sb);
-  const r7 = vm.runInContext('Abbo.usati()===5 && Abbo.puoCreare()===false', sb);
-  check('Abbonamento: gating, limite, stato e contatore (account+dispositivo)', r1 && r2 && r3 && r4 && r5 && r6 && r7,
-    `r1=${r1} r2=${r2} r3=${r3} r4=${r4} r5=${r5} r6=${r6} r7=${r7}`);
+  const r1 = run(sb, 'Abbo.gatingAttivo()===false && Abbo.puoCreare()===true');
+  run(sb, `STRIPE_PREZZI.mensile='price_test'; localStorage.setItem('mv_stat', JSON.stringify({prevCreati:5}));`);
+  const r2 = run(sb, 'Abbo.gatingAttivo()===true && Abbo.puoCreare()===false && Abbo.rimasti()===0');
+  run(sb, `localStorage.setItem('mv_abbo', JSON.stringify({attivo:true, fine: Date.now()+86400000}));`);
+  const r3 = run(sb, 'Abbo.attivo()===true && Abbo.puoCreare()===true');
+  run(sb, `localStorage.setItem('mv_abbo', JSON.stringify({attivo:true, fine: Date.now()-1000}));`);
+  const r4 = run(sb, 'Abbo.attivo()===false && Abbo.puoCreare()===false');
+  run(sb, 'Abbo.registraCreazione()');
+  const r5 = run(sb, 'Abbo.usati()===6');
+  run(sb, `localStorage.setItem('mv_stat', JSON.stringify({prevCreati:0})); localStorage.setItem('mv_abbo','{}');`);
+  const r6 = run(sb, 'Abbo.usati()===1 && Abbo.puoCreare()===true');
+  run(sb, `localStorage.setItem('mv_stat_dev', JSON.stringify({prevCreati:5}));`);
+  const r7 = run(sb, 'Abbo.usati()===5 && Abbo.puoCreare()===false');
+  // col limite raggiunto un NUOVO preventivo non si salva (i vecchi sì)
+  const r8 = run(sb, `wzNuovo(); doc.cliente.nome='X'; wzSalvaOra()===false && preventivi.length===0`);
+  check('Abbonamento: gating, limite, stato e contatore (account+dispositivo)', r1 && r2 && r3 && r4 && r5 && r6 && r7 && r8,
+    `r1=${r1} r2=${r2} r3=${r3} r4=${r4} r5=${r5} r6=${r6} r7=${r7} r8=${r8}`);
 } catch (e) { check('Abbonamento: gating, limite, stato e contatore (account+dispositivo)', false, e.message); }
 
-// 12) Isolamento account: un nuovo account NON eredita i dati locali del
+// 11) Isolamento account: un nuovo account NON eredita i dati locali del
 //     precedente; al ritorno del primo account i suoi dati tornano.
 try {
   const seed = {
     mv_uid: 'utenteA',
-    mv_prev: JSON.stringify([{ id: 1, numero: 'P-1', cliente: { nome: 'DiUtenteA' }, locali: [] }]),
+    mv_prev: JSON.stringify([DOC]),
     mv_impresa: JSON.stringify({ nome: 'Impresa A' }),
-    mv_stat_dev: JSON.stringify({ prevCreati: 5 }), // contatore del DISPOSITIVO
+    mv_listino: JSON.stringify({ tp: 8 }),
+    mv_stat_dev: JSON.stringify({ prevCreati: 5 }),
   };
   const sb = loadApp(seed);
   boot(sb);
-  const primaN = vm.runInContext('preventivi.length', sb);
-  vm.runInContext('preparaDatiPerUtente("utenteB")', sb);
-  const dopoSwitch = JSON.parse(vm.runInContext(
-    `JSON.stringify({n:preventivi.length, imp:impresa.nome||'', uid:localStorage.getItem('mv_uid'), stash:!!localStorage.getItem('mv_saved_utenteA'), usati:Abbo.usati()})`, sb));
-  vm.runInContext('preparaDatiPerUtente("utenteA")', sb);
-  const ritorno = JSON.parse(vm.runInContext(
-    `JSON.stringify({n:preventivi.length, nome:(preventivi[0]||{}).cliente ? preventivi[0].cliente.nome : '', stashB:!!localStorage.getItem('mv_saved_utenteB'), stashA:!!localStorage.getItem('mv_saved_utenteA')})`, sb));
+  const primaN = run(sb, 'preventivi.length');
+  run(sb, 'preparaDatiPerUtente("utenteB")');
+  const dopo = JSON.parse(run(sb,
+    `JSON.stringify({n:preventivi.length, imp:impresa.nome||'', uid:localStorage.getItem('mv_uid'), stash:!!localStorage.getItem('mv_saved_utenteA'), usati:Abbo.usati(), listino:Store.loadListino().tp||0, docNome:doc.cliente.nome})`));
+  run(sb, 'preparaDatiPerUtente("utenteA")');
+  const ritorno = JSON.parse(run(sb,
+    `JSON.stringify({n:preventivi.length, nome:(preventivi[0]||{}).cliente ? preventivi[0].cliente.nome : '', listino:Store.loadListino().tp||0, stashB:!!localStorage.getItem('mv_saved_utenteB'), stashA:!!localStorage.getItem('mv_saved_utenteA')})`));
   const ok = primaN === 1
-    && dopoSwitch.n === 0 && dopoSwitch.imp === '' && dopoSwitch.uid === 'utenteB' && dopoSwitch.stash === true
-    && dopoSwitch.usati === 5 // il contatore del dispositivo sopravvive al cambio account
-    && ritorno.n === 1 && ritorno.nome === 'DiUtenteA' && ritorno.stashB === true && ritorno.stashA === false;
-  check('Isolamento account: switch pulito e ripristino al ritorno', ok,
-    `prima=${primaN} dopo=${JSON.stringify(dopoSwitch)} ritorno=${JSON.stringify(ritorno)}`);
+    && dopo.n === 0 && dopo.imp === '' && dopo.uid === 'utenteB' && dopo.stash === true && dopo.usati === 5 && dopo.listino === 0 && dopo.docNome === ''
+    && ritorno.n === 1 && ritorno.nome === 'Mario Rossi' && ritorno.listino === 8 && ritorno.stashB === true && ritorno.stashA === false;
+  check('Isolamento account: switch pulito e ripristino al ritorno', ok, `prima=${primaN} dopo=${JSON.stringify(dopo)} ritorno=${JSON.stringify(ritorno)}`);
 } catch (e) { check('Isolamento account: switch pulito e ripristino al ritorno', false, e.message); }
+
+// 12) Disegno tecnico degli infissi: aperture corrette e quote in mm.
+try {
+  const sb = loadApp({});
+  const a = (apr, ante) => JSON.stringify(sb.apertureInfisso({ apr, ante }));
+  const svg = sb.disegnoInfisso({ tipo: 'portafinestra', lung: 1400, alt: 2300, ante: 2, apr: 'battente' });
+  const ok = a('battente', 2) === '["battente-sx","battente-dx"]' && a('ribalta', 1) === '["ribalta-dx"]'
+    && a('scorrevole', 2) === '["fissa","scorrevole-sx"]' && a('fissa', 3) === '["fissa","fissa","fissa"]'
+    && svg.includes('<svg') && svg.includes('>1400<') && svg.includes('>2300<') && svg.includes('stroke-dasharray');
+  check('Infissi: aperture e disegno con quote', ok, svg.slice(0, 80));
+} catch (e) { check('Infissi: aperture e disegno con quote', false, e.message); }
 
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);
