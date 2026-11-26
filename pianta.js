@@ -596,6 +596,83 @@ const Pianta=(function(){
     });
     return fatti;
   }
+  /* ── COERENZA DELLE MISURE ──
+     Le misure (muri e stanze) sono distanze tra le "linee" della pianta. Con
+     l'ordine delle linee preso dal disegno (ogni tratto ≥ 5 cm), si calcola per
+     Bellman–Ford quanto può valere una nuova misura: se esce dall'intervallo
+     di oltre TOLL_MISURE, non torna con il disegno e non si salva. */
+  const TOLL_MISURE=0.5, TRATTO_MIN=0.05;
+  function lineeEVincoli(esclLoc, esclQuota){
+    const X=[...new Set(walls.flatMap(w=>[w.x1,w.x2]))].sort((a,b)=>a-b);
+    const Y=[...new Set(walls.flatMap(w=>[w.y1,w.y2]))].sort((a,b)=>a-b);
+    const vx=[], vy=[];
+    if(grid) regions.forEach(r=>{
+      if(!misurato(r.data) || r.data.locId===esclLoc) return;
+      const xa=(r.minx+grid.gx0)*CELL, xb=(r.maxx+1+grid.gx0)*CELL, ya=(r.miny+grid.gy0)*CELL, yb=(r.maxy+1+grid.gy0)*CELL;
+      const ia=X.indexOf(xa), ib=X.indexOf(xb), ja=Y.indexOf(ya), jb=Y.indexOf(yb);
+      if(ia>=0 && ib>ia) vx.push({a:ia, b:ib, val:r.data.L});
+      if(ja>=0 && jb>ja) vy.push({a:ja, b:jb, val:r.data.W});
+    });
+    quoteValide().forEach(q=>{
+      if(esclQuota && q.o===esclQuota.o && q.c===esclQuota.c && q.a===esclQuota.a && q.b===esclQuota.b) return;
+      const L= q.o==='H'?X:Y, ia=L.indexOf(q.a), ib=L.indexOf(q.b);
+      if(ia>=0 && ib>ia) (q.o==='H'?vx:vy).push({a:ia, b:ib, val:q.val});
+    });
+    return {X, Y, vx, vy};
+  }
+  // [min, max] di (linea b − linea a) in metri; null se le misure già presenti si contraddicono
+  function intervallo(n, vinc, a, b, eps){
+    const E=[];
+    for(let k=0;k<n-1;k++) E.push([k+1, k, -TRATTO_MIN]);
+    for(const c of vinc){ E.push([c.a, c.b, c.val+eps]); E.push([c.b, c.a, -(c.val-eps)]); }
+    const bf=src=>{
+      const d=new Array(n).fill(Infinity); d[src]=0;
+      for(let it=0; it<n; it++){
+        let cambio=false;
+        for(const [u,v,w] of E) if(d[u]+w<d[v]-1e-9){ d[v]=d[u]+w; cambio=true; }
+        if(!cambio) return d;
+      }
+      return null;   // ciclo negativo: misure incoerenti tra loro
+    };
+    const da=bf(a), db=bf(b);
+    if(!da || !db) return null;
+    return {min:-db[a], max:da[b]};
+  }
+  // Controlla una misura nuova tra le linee a..b (asse 'x' o 'y'); messaggio se non torna.
+  function controllaTratto(asse, a, b, val, esclLoc, esclQuota, cosa){
+    const lv=lineeEVincoli(esclLoc, esclQuota), L= asse==='x'?lv.X:lv.Y, vinc= asse==='x'?lv.vx:lv.vy;
+    const ia=L.indexOf(a), ib=L.indexOf(b);
+    if(ia<0 || ib<=ia || !(val>0)) return null;
+    const r=intervallo(L.length, vinc, ia, ib, 0.01) || intervallo(L.length, vinc, ia, ib, TOLL_MISURE);
+    if(!r) return null;
+    if(val>=r.min-TOLL_MISURE && val<=r.max+TOLL_MISURE) return null;
+    const lo=Math.max(TRATTO_MIN, r.min), hi=r.max;
+    const campo= Number.isFinite(hi) ? `tra ${f2(lo)} e ${f2(hi)} m` : `almeno ${f2(lo)} m`;
+    return `${cosa} ${f2(val)} m non torna con il disegno e le altre misure: qui ci stanno ${campo}. Se è giusta questa, correggi prima le altre.`;
+  }
+  // Proporzione col disegno: metri per unità ricavati dalle altre misure; se la nuova
+  // misura è più del doppio (o meno della metà) di quel che sembra, si chiede conferma.
+  function dubbioProporzione(asse, a, b, val, esclLoc, esclQuota, cosa){
+    const lv=lineeEVincoli(esclLoc, esclQuota);
+    let num_=0, den=0;
+    [[lv.X,lv.vx],[lv.Y,lv.vy]].forEach(([L,vv])=>vv.forEach(c=>{ const u=L[c.b]-L[c.a]; if(u>0){ num_+=c.val; den+=u; } }));
+    if(!den || !(val>0)) return null;
+    const stima=(b-a)*num_/den;
+    if(!(stima>0) || (val<=stima*2 && val>=stima/2)) return null;
+    return `Nel disegno ${cosa.toLowerCase()} sembra circa ${f2(stima)} m. Confermi ${f2(val)} m?`;
+  }
+  // Misure di una stanza (lunghezza ↔, larghezza ↕) rispetto a disegno e altre misure.
+  // {errore} blocca il salvataggio, {dubbio} chiede conferma.
+  function controllaStanza(r, L, W){
+    if(!r || !grid) return {errore:null, dubbio:null};
+    const xa=(r.minx+grid.gx0)*CELL, xb=(r.maxx+1+grid.gx0)*CELL, ya=(r.miny+grid.gy0)*CELL, yb=(r.maxy+1+grid.gy0)*CELL;
+    const id=r.data && r.data.locId;
+    const errore=(L>0 && controllaTratto('x', xa, xb, L, id, null, 'La lunghezza'))
+        || (W>0 && controllaTratto('y', ya, yb, W, id, null, 'La larghezza')) || null;
+    const dubbio= errore ? null : ((L>0 && dubbioProporzione('x', xa, xb, L, id, null, 'La lunghezza'))
+        || (W>0 && dubbioProporzione('y', ya, yb, W, id, null, 'La larghezza')) || null);
+    return {errore, dubbio};
+  }
   // Cuore della messa in scala (senza schermo: lo usa anche il preventivo).
   function scalaCore(){
     const misurati=regions.filter(r=>misurato(r.data)), qv=quoteValide();
@@ -933,6 +1010,9 @@ const Pianta=(function(){
   form.addEventListener('submit', e=>{
     e.preventDefault();
     const r=regions[selRegion]; if(!r){ chiudiModal(); return; }
+    const ck=controllaStanza(r, num(fL.value), num(fW.value));
+    if(ck.errore){ toast(ck.errore, 6000); return; }
+    if(ck.dubbio && !confirm(ck.dubbio)) return;
     snapshot();
     if(!r.data || !locDi(r.data.locId)) collegaLocali();
     const l=r.data && locDi(r.data.locId); if(!l){ chiudiModal(); return; }
@@ -1254,7 +1334,7 @@ const Pianta=(function(){
     const q=quotaDi(w), hor=w.y1===w.y2;
     qVal.value= q ? fmtIn(q.val) : '';
     $('qInfo').textContent= inScala && !q ? `Nel disegno: ${f2((hor?w.x2-w.x1:w.y2-w.y1)/PPM)} m` : 'Lunghezza del muro in metri, da spigolo a spigolo.';
-    $('qDel').hidden=!q;
+    $('qDel').hidden=!q; $('qInfo').classList.remove('pz-err');
     quotaModal.hidden=false;
     setTimeout(()=>{ try{ qVal.focus(); qVal.select(); }catch(_){} },30);
   }
@@ -1274,7 +1354,18 @@ const Pianta=(function(){
     if(val>0 && tutte){ setTimeout(mettiInScala, 300); return; }
     toast(val>0 ? (compilate.length ? `Misura salvata · ${compilate.join(', ')}: misure compilate` : 'Misura del muro salvata') : 'Misura tolta');
   }
-  $('quotaForm').addEventListener('submit', e=>{ e.preventDefault(); const v=num(qVal.value); if(!v){ toast('Scrivi la lunghezza in metri'); return; } salvaQuota(v); });
+  $('quotaForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const v=num(qVal.value); if(!v){ toast('Scrivi la lunghezza in metri'); return; }
+    const w=quotaMuro, hor=w.y1===w.y2;
+    const esc_={o:hor?'H':'V', c:hor?w.y1:w.x1, a:hor?w.x1:w.y1, b:hor?w.x2:w.y2};
+    const errore=controllaTratto(hor?'x':'y', esc_.a, esc_.b, v, null, esc_, 'La misura');
+    if(errore){ const i=$('qInfo'); i.textContent=errore; i.classList.add('pz-err'); qVal.focus(); return; }
+    const dubbio=dubbioProporzione(hor?'x':'y', esc_.a, esc_.b, v, null, esc_, 'La misura');
+    if(dubbio && !confirm(dubbio)) return;
+    salvaQuota(v);
+  });
+  qVal.addEventListener('input', ()=>$('qInfo').classList.remove('pz-err'));
   $('qDel').addEventListener('click', ()=>salvaQuota(0));
   $('qClose').addEventListener('click', chiudiQuota);
   $('qCancel').addEventListener('click', chiudiQuota);
@@ -1565,8 +1656,17 @@ const Pianta=(function(){
     esporta(); docRef=null;
     return {esito, avvisi:avvisi.slice()};
   }
+  // Le misure L×W del locale tornano con la pianta? (dal preventivo, senza schermo)
+  function controllaLocale(d, locId, L, W){
+    if(!d || !d.pianta || !(d.pianta.walls||[]).length) return null;
+    carica(d); alChiudere=null; ricalcola();
+    const r=regions.find(x=>x.data && x.data.locId===locId);
+    const ck=r ? controllaStanza(r, L, W) : {errore:null, dubbio:null};
+    docRef=null;
+    return ck;
+  }
   // Ricalcola i collegamenti stanze↔locali (es. dopo modifiche nel preventivo).
   function aggiornaDoc(d){ carica(d); alChiudere=null; ricalcola(); esporta(); docRef=null; }
   bottoniStoria();
-  return {apri, chiudi, scala, aggiornaDoc, aperto:()=>aperto};
+  return {apri, chiudi, scala, aggiornaDoc, controllaLocale, aperto:()=>aperto};
 })();

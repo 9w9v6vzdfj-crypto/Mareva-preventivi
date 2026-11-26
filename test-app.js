@@ -369,5 +369,34 @@ try {
   check('Misure dei muri: messa in scala e pianta del PDF', ok, JSON.stringify({ esito, st, q }));
 } catch (e) { check('Misure dei muri: messa in scala e pianta del PDF', false, e.message); }
 
+// 18) Coerenza: una stanza dentro una misura più grande non può superarla
+//     (tolleranza 0,5 m); le misure coerenti passano.
+try {
+  const sb = loadApp({});
+  boot(sb);
+  const C = 12, k = 4, P = (x, y) => ({ x: x * k * C, y: y * k * C });
+  const seg = (a, b, c, d) => { const p = P(a, b), q = P(c, d); return { x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y) }; };
+  const d = JSON.parse(JSON.stringify(DOC));
+  d.via = 'disegno'; d.locali = [];
+  // casa larga 6 m (misura del muro in alto, per intero), divisa in due stanze
+  d.pianta = { walls: [seg(0,0,12,0), seg(0,8,12,8), seg(0,0,0,8), seg(12,0,12,8), seg(6,0,6,8)], rooms: [], infissi: [],
+               quote: [{ o: 'H', c: 0, a: 0, b: 12 * k * C, val: 6 }] };
+  run(sb, 'doc=normalizzaDoc(' + JSON.stringify(d) + '); Pianta.aggiornaDoc(doc);');
+  const id = run(sb, 'doc.locali[0].id');
+  const troppo = run(sb, `Pianta.controllaLocale(doc, ${id}, 7, 4).errore`);
+  const tolleranza = run(sb, `Pianta.controllaLocale(doc, ${id}, 6.3, 4).errore`);
+  const giusta = run(sb, `Pianta.controllaLocale(doc, ${id}, 3.5, 4).errore`);
+  // larghezza senza altre misure verticali: non è un errore, ma è 5 volte quel che sembra → conferma
+  const dubbio = run(sb, `Pianta.controllaLocale(doc, ${id}, 3.5, 20).dubbio`);
+  // con la prima stanza a 3,5 m, la seconda ci sta in ~2,5 m (± 0,5)
+  run(sb, `doc.locali[0].L=3.5; doc.locali[0].W=4;`);
+  const id2 = run(sb, 'doc.locali[1].id');
+  const seconda = run(sb, `Pianta.controllaLocale(doc, ${id2}, 4, 4).errore`);
+  const secondaOk = run(sb, `Pianta.controllaLocale(doc, ${id2}, 2.5, 4).errore`);
+  const ok = typeof troppo === 'string' && troppo.includes('non torna') && tolleranza === null && giusta === null
+    && typeof seconda === 'string' && secondaOk === null && typeof dubbio === 'string' && dubbio.includes('Confermi');
+  check('Coerenza delle misure con il disegno (tolleranza 0,5 m)', ok, JSON.stringify({ troppo, tolleranza, giusta, seconda, secondaOk, dubbio }));
+} catch (e) { check('Coerenza delle misure con il disegno (tolleranza 0,5 m)', false, e.message); }
+
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);

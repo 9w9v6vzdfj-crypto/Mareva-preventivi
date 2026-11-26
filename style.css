@@ -649,3 +649,6 @@ select.wz-mini{width:auto;text-align:left}
 .filtro.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .filtro.on b{color:#fff}
 .filtri-nota{font-size:13px;color:var(--sub);margin:-4px 0 12px}
+#piantaOv .pz-scalanote.pz-err{color:var(--danger);font-weight:600}
+.wz-toast{max-width:min(420px, calc(100% - 32px));border-radius:16px;line-height:1.35}
+#piantaOv .pz-toast{white-space:normal;text-align:center;border-radius:14px;max-width:min(440px, calc(100% - 32px));line-height:1.35}
