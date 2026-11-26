@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Facile Preventivo">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=38">
+<link rel="stylesheet" href="style.css?v=39">
 </head>
 <body>
 <!-- ═══ SCHERMATA DI ACCESSO (cancello: l'app sta sotto, coperta finché non entri) ═══ -->
@@ -257,6 +257,7 @@
 
 <div class="pz-pop" id="pop" hidden role="menu">
   <div class="pz-pt" id="popT">Muro</div>
+  <button type="button" data-p="misura" id="popMis" role="menuitem"><svg viewBox="0 0 24 24"><path d="M3 17 17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/></svg>Misura muro</button>
   <button type="button" data-p="porta" role="menuitem"><svg viewBox="0 0 24 24"><path d="M5 21V4h10v17"/><path d="M3 21h14"/><circle cx="12" cy="13" r=".6"/></svg>Aggiungi porta</button>
   <button type="button" data-p="finestra" role="menuitem"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M12 4v16M4 12h16"/></svg>Aggiungi finestra</button>
   <button type="button" data-p="del" class="pz-warn" role="menuitem"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Elimina muro</button>
@@ -310,6 +311,22 @@
   </form>
 </div>
 
+<div class="pz-modal" id="quotaModal" hidden>
+  <form class="pz-card" id="quotaForm" role="dialog" aria-modal="true" aria-labelledby="qTitle" novalidate>
+    <div class="pz-card-head">
+      <h2 id="qTitle">Misura del muro</h2>
+      <button type="button" class="pz-x" id="qClose" aria-label="Chiudi">×</button>
+    </div>
+    <label class="pz-f"><span>Lunghezza m</span><input id="qVal" inputmode="decimal" autocomplete="off" placeholder="3,40"></label>
+    <p class="pz-scalanote" id="qInfo">—</p>
+    <div class="pz-actions">
+      <button type="button" class="pz-btn pz-del" id="qDel" hidden>Togli misura</button>
+      <button type="button" class="pz-btn" id="qCancel">Annulla</button>
+      <button type="submit" class="pz-btn pz-primary">Salva</button>
+    </div>
+  </form>
+</div>
+
 <div class="pz-modal" id="infModal" hidden>
   <form class="pz-card" id="infForm" role="dialog" aria-modal="true" aria-labelledby="iTitle" novalidate>
     <div class="pz-card-head">
@@ -340,7 +357,7 @@
     <ul class="pz-help">
       <li><b>Disegna</b><span>Traccia le pareti col dito. Mentre disegni vedi in blu come le raddrizzo; il pallino indica dove si aggancia.</span></li>
       <li><b>Stanza</b><span>Quando si chiude si colora. Toccala per darle un nome e le misure.</span></li>
-      <li><b>Muro</b><span>Tocca un muro per aggiungere una porta, una finestra o per eliminarlo.</span></li>
+      <li><b>Muro</b><span>Tocca un muro per scrivere la sua misura, aggiungere una porta o una finestra, o eliminarlo. Le misure dei muri aiutano la messa in scala e compilano da sole le misure delle stanze rettangolari.</span></li>
       <li><b>2 dita</b><span>Spostano il foglio e fanno lo zoom. Al computer: rotellina e Maiusc + trascina.</span></li>
       <li><b>↶ ↷</b><span>Annulla e Ripeti, sempre in basso: prova senza paura.</span></li>
       <li><b>In scala</b><span>Quando tutte le stanze hanno le misure, la pianta si mette in scala da sola.</span></li>
@@ -378,8 +395,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="app.js?v=38"></script>
-<script src="preventivo.js?v=38"></script>
-<script src="pianta.js?v=38"></script>
+<script src="app.js?v=39"></script>
+<script src="preventivo.js?v=39"></script>
+<script src="pianta.js?v=39"></script>
 </body>
 </html>

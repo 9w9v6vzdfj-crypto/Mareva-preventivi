@@ -27,6 +27,7 @@ const Pianta=(function(){
   let chiudiAperture=true;          // vani porta tra spallette = chiusura del locale
   let virtuali=[];                  // chiusure "virtuali" dei vani (tratteggio)
   let angoli=[];                    // angoli quasi chiusi, completati in automatico
+  let quote=[];                     // misure dei muri: {o:'H'|'V', c, a, b, val} (c = y o x del muro, a..b il tratto, val in metri)
   let infissi=[];                   // porte e finestre: {x,y,o,tipo,w,h,sill} (x,y sul muro; w,h,sill in metri)
   let troppoGrande=false;           // disegno troppo esteso per cercare i locali
   let avvisi=[];                    // misure che non tornano dopo la messa in scala
@@ -59,6 +60,7 @@ const Pianta=(function(){
     walls=(Array.isArray(p.walls)?p.walls:[]).filter(w=>w && [w.x1,w.y1,w.x2,w.y2].every(Number.isFinite));
     roomsData=(Array.isArray(p.rooms)?p.rooms:[]).filter(r=>r && r.anchor).map(r=>({anchor:{gx:r.anchor.gx, gy:r.anchor.gy}, locId:r.locId}));
     infissi=(Array.isArray(p.infissi)?p.infissi:[]).map(f=>Object.assign({}, f));
+    quote=(Array.isArray(p.quote)?p.quote:[]).filter(q=>q && (q.o==='H'||q.o==='V') && [q.c,q.a,q.b,q.val].every(Number.isFinite)).map(q=>Object.assign({}, q));
     infissi.forEach(f=>{ if(!f.id) f.id=nuovoIdInf(); });
     inScala=!!p.inScala; chiudiAperture= p.chiudiAperture!==false;
     view=(p.view && [p.view.s,p.view.tx,p.view.ty].every(Number.isFinite)) ? Object.assign({},p.view) : {s:1,tx:0,ty:0};
@@ -110,7 +112,7 @@ const Pianta=(function(){
     clearTimeout(saveT);
     if(!docRef) return;
     collegaLocali();
-    docRef.pianta={walls, rooms:roomsData, infissi, inScala, chiudiAperture, view, anteprima:anteprima()};
+    docRef.pianta={walls, rooms:roomsData, infissi, quote, inScala, chiudiAperture, view, anteprima:anteprima()};
     if(alChiudere && alChiudere.cambio) alChiudere.cambio();
   }
   // Disegno "da stampa": muri, stanze come rettangoli (righe di quadretti unite), infissi.
@@ -131,11 +133,12 @@ const Pianta=(function(){
     });
     const K=metriPerUnita();
     const inf=infissi.filter(f=>muroDi(f)).map(f=>({tipo:f.tipo, o:f.o, x:f.x, y:f.y, half:f.w/2/K}));
-    return {box:[x0,y0,x1,y1], muri:tutti.map(w=>[w.x1,w.y1,w.x2,w.y2]), vani:virtuali.map(w=>[w.x1,w.y1,w.x2,w.y2]), stanze, inf, inScala, cell:CELL};
+    const qt=quoteValide().map(q=>({o:q.o, x:q.o==='H'?(q.a+q.b)/2:q.c, y:q.o==='H'?q.c:(q.a+q.b)/2, txt:f2(q.val)+' m'}));
+    return {box:[x0,y0,x1,y1], muri:tutti.map(w=>[w.x1,w.y1,w.x2,w.y2]), vani:virtuali.map(w=>[w.x1,w.y1,w.x2,w.y2]), stanze, inf, quote:qt, inScala, cell:CELL};
   }
 
   /* ── annulla ── */
-  const stato=()=>JSON.stringify({walls, roomsData, inScala, infissi,
+  const stato=()=>JSON.stringify({walls, roomsData, inScala, infissi, quote,
     locs: docRef ? docRef.locali.filter(l=>l.daPianta||l.inPianta).map(l=>({id:l.id, nome:l.nome, L:l.L, W:l.W, H:l.H, daPianta:!!l.daPianta})) : []});
   function bottoniStoria(){ $('btnUndo').disabled=!hist.length; $('btnRedo').disabled=!fut.length; }
   function snapshot(){
@@ -146,7 +149,7 @@ const Pianta=(function(){
   function ripristina(str){
     const s=JSON.parse(str);
     chiudiNomi();
-    walls=s.walls; roomsData=s.roomsData; inScala=!!s.inScala; infissi=s.infissi||[]; avvisi=[];
+    walls=s.walls; roomsData=s.roomsData; inScala=!!s.inScala; infissi=s.infissi||[]; quote=s.quote||[]; avvisi=[];
     if(docRef) (s.locs||[]).forEach(x=>{
       let l=locDi(x.id);
       if(!l){ l=nuovoLocale(x.id, x.nome); l.daPianta=x.daPianta; docRef.locali.push(l); }
@@ -562,10 +565,41 @@ const Pianta=(function(){
       return P[k]+(v-L[k])*(P[k+1]-P[k])/(L[k+1]-L[k]);
     };
   }
+  /* ── misure dei muri ── */
+  // una misura vale finché il suo tratto è ancora coperto da muri
+  function quotaValida(q){
+    let cop=0;
+    for(const w of walls){
+      if(q.o==='H' ? (w.y1!==w.y2 || w.y1!==q.c) : (w.x1!==w.x2 || w.x1!==q.c)) continue;
+      const a= q.o==='H'?w.x1:w.y1, b= q.o==='H'?w.x2:w.y2;
+      cop+=Math.max(0, Math.min(b,q.b)-Math.max(a,q.a));
+    }
+    return cop>=q.b-q.a-1e-6;
+  }
+  const quoteValide=()=>quote.filter(quotaValida);
+  const quotaDi=w=> w.y1===w.y2 ? quote.find(q=>q.o==='H' && q.c===w.y1 && q.a===w.x1 && q.b===w.x2)
+                                 : quote.find(q=>q.o==='V' && q.c===w.x1 && q.a===w.y1 && q.b===w.y2);
+  // stanza rettangolare con un lato misurato per intero: lunghezza/larghezza si compilano da sole
+  function compilaDaQuote(){
+    if(!grid || !docRef) return [];
+    const qv=quoteValide(), fatti=[];
+    regions.forEach((r,i)=>{
+      const l=r.data && locDi(r.data.locId); if(!l) return;
+      if(r.cells.length!==(r.maxx-r.minx+1)*(r.maxy-r.miny+1)) return;
+      const xa=(r.minx+grid.gx0)*CELL, xb=(r.maxx+1+grid.gx0)*CELL, ya=(r.miny+grid.gy0)*CELL, yb=(r.maxy+1+grid.gy0)*CELL;
+      const qL=qv.find(q=>q.o==='H' && (q.c===ya||q.c===yb) && q.a===xa && q.b===xb);
+      const qW=qv.find(q=>q.o==='V' && (q.c===xa||q.c===xb) && q.a===ya && q.b===yb);
+      let ok=false;
+      if(qL && !(l.L>0)){ l.L=qL.val; ok=true; }
+      if(qW && !(l.W>0)){ l.W=qW.val; ok=true; }
+      if(ok){ if(!(l.H>0)) l.H=2.7; fatti.push(nomeLocale(r,i)); }
+    });
+    return fatti;
+  }
   // Cuore della messa in scala (senza schermo: lo usa anche il preventivo).
   function scalaCore(){
-    const misurati=regions.filter(r=>misurato(r.data));
-    if(!misurati.length) return 'nessuna';
+    const misurati=regions.filter(r=>misurato(r.data)), qv=quoteValide();
+    if(!misurati.length && !qv.length) return 'nessuna';
     const X=[...new Set(walls.flatMap(w=>[w.x1,w.x2]))].sort((a,b)=>a-b);
     const Y=[...new Set(walls.flatMap(w=>[w.y1,w.y2]))].sort((a,b)=>a-b);
     const vx=[], vy=[];
@@ -576,6 +610,10 @@ const Pianta=(function(){
       if(ia>=0 && ib>ia) vx.push({a:ia, b:ib, val:r.data.L});
       if(ja>=0 && jb>ja) vy.push({a:ja, b:jb, val:r.data.W});
     }
+    for(const q of qv){
+      const L= q.o==='H'?X:Y, ia=L.indexOf(q.a), ib=L.indexOf(q.b);
+      if(ia>=0 && ib>ia) (q.o==='H'?vx:vy).push({a:ia, b:ib, val:q.val});
+    }
     const PX=risolvi(X,vx), PY=risolvi(Y,vy);
     if(!PX || !PY) return 'errore';
     const mx=mappa(X,PX), my=mappa(Y,PY);
@@ -585,6 +623,7 @@ const Pianta=(function(){
       d.anchor={gx:Math.floor(mx((d.anchor.gx+.5)*CELL)/CELL), gy:Math.floor(my((d.anchor.gy+.5)*CELL)/CELL)};
     });
     infissi.forEach(f=>{ f.x=mx(f.x); f.y=my(f.y); });
+    quote.forEach(q=>{ if(q.o==='H'){ q.c=my(q.c); q.a=mx(q.a); q.b=mx(q.b); } else { q.c=mx(q.c); q.a=my(q.a); q.b=my(q.b); } });
     inScala=true;
     ricalcola();
     // controllo: ogni locale misurato ha davvero le sue misure nel disegno?
@@ -599,7 +638,7 @@ const Pianta=(function(){
   }
   function mettiInScala(){
     chiudiMenu();
-    if(!regions.some(r=>misurato(r.data))){ toast('Prima inserisci le misure di almeno un locale'); return; }
+    if(!regions.some(r=>misurato(r.data)) && !quoteValide().length){ toast('Prima inserisci le misure di una stanza o di un muro'); return; }
     const prima=stato();
     const esito=scalaCore();
     if(esito!=='ok'){ toast('Non riesco a mettere in scala questo disegno'); return; }
@@ -729,6 +768,18 @@ const Pianta=(function(){
     // livello dello schermo: etichette e cursore gomma
     ctx.setTransform(dpr,0,0,dpr,0,0);
     ctx.textAlign='center'; ctx.textBaseline='middle';
+    // misure dei muri, scritte lungo il muro
+    ctx.font=`700 12px 'Inter', system-ui, sans-serif`;
+    for(const q of quoteValide()){
+      const m= q.o==='H' ? toScreen({x:(q.a+q.b)/2, y:q.c}) : toScreen({x:q.c, y:(q.a+q.b)/2});
+      if((q.b-q.a)*s<28) continue;
+      const txt=f2(q.val)+' m';
+      ctx.save(); ctx.translate(m.x, m.y); if(q.o==='V') ctx.rotate(-Math.PI/2);
+      const tw=ctx.measureText(txt).width+10;
+      ctx.fillStyle=t.paper; ctx.fillRect(-tw/2,-19,tw,15);
+      ctx.fillStyle=t.accent; ctx.fillText(txt,0,-11);
+      ctx.restore();
+    }
     if(!walls.length && !drawing){
       const cy=H*.46;
       ctx.fillStyle=t.muted;
@@ -936,12 +987,13 @@ const Pianta=(function(){
     if(!clearArm){ clearArm=true; miClear.textContent='Tocca di nuovo per cancellare'; return; }
     chiudiMenu();
     if(walls.length) snapshot();
-    walls=[]; roomsData=[]; infissi=[]; inScala=false; avvisi=[]; aggiorna(); toast('Foglio vuoto · ↶ per recuperarlo');
+    walls=[]; roomsData=[]; infissi=[]; quote=[]; inScala=false; avvisi=[]; aggiorna(); toast('Foglio vuoto · ↶ per recuperarlo');
   });
   document.addEventListener('keydown', e=>{
     if(!aperto) return;
     if(e.key==='Escape'){
       if(!pop.hidden) chiudiPop();
+      else if(!quotaModal.hidden) chiudiQuota();
       else if(!infModal.hidden) chiudiInfisso();
       else if(!modal.hidden) chiudiModal();
       else if(!helpModal.hidden) chiudiGuida();
@@ -1127,7 +1179,9 @@ const Pianta=(function(){
   function apriPop(i, p, wp){
     selWall=i; popPunto=wp; requestDraw();
     const w=walls[i], hor=w.y1===w.y2, lu=(hor?w.x2-w.x1:w.y2-w.y1);
-    $('popT').textContent= inScala ? `Muro · ${f2(lu/PPM)} m` : 'Muro';
+    const q=quotaDi(w);
+    $('popT').textContent= q ? `Muro · ${f2(q.val)} m` : (inScala ? `Muro · ${f2(lu/PPM)} m` : 'Muro');
+    $('popMis').lastChild.textContent= q ? 'Cambia misura' : 'Misura muro';
     pop.hidden=false;
     const r=pop.getBoundingClientRect();
     pop.style.left=Math.max(12, Math.min(W-r.width-12, p.x-r.width/2))+'px';
@@ -1181,6 +1235,7 @@ const Pianta=(function(){
     const w=walls[selWall], wp=popPunto; if(!w){ chiudiPop(); return; }
     const azione=b.dataset.p, i=selWall;
     chiudiPop();
+    if(azione==='misura'){ apriQuota(i); return; }
     if(azione==='del'){
       snapshot(); walls.splice(i,1);
       inScala=false; avvisi=[];
@@ -1190,6 +1245,41 @@ const Pianta=(function(){
     const hor=w.y1===w.y2;
     apriInfisso(-1, {o:hor?'H':'V', x: hor?Math.max(w.x1,Math.min(w.x2,wp.x)):w.x1, y: hor?w.y1:Math.max(w.y1,Math.min(w.y2,wp.y)), tipo:azione});
   });
+  /* ── finestra "Misura del muro" ── */
+  const quotaModal=$('quotaModal'), qVal=$('qVal');
+  let quotaMuro=null;
+  function apriQuota(i){
+    const w=walls[i]; if(!w) return;
+    quotaMuro=Object.assign({}, w); selWall=i; requestDraw();
+    const q=quotaDi(w), hor=w.y1===w.y2;
+    qVal.value= q ? fmtIn(q.val) : '';
+    $('qInfo').textContent= inScala && !q ? `Nel disegno: ${f2((hor?w.x2-w.x1:w.y2-w.y1)/PPM)} m` : 'Lunghezza del muro in metri, da spigolo a spigolo.';
+    $('qDel').hidden=!q;
+    quotaModal.hidden=false;
+    setTimeout(()=>{ try{ qVal.focus(); qVal.select(); }catch(_){} },30);
+  }
+  function chiudiQuota(){ quotaModal.hidden=true; quotaMuro=null; selWall=-1; requestDraw(); }
+  function salvaQuota(val){
+    const w=quotaMuro; if(!w) return chiudiQuota();
+    snapshot();
+    const hor=w.y1===w.y2, nuova={o:hor?'H':'V', c:hor?w.y1:w.x1, a:hor?w.x1:w.y1, b:hor?w.x2:w.y2, val};
+    quote=quote.filter(q=>!(q.o===nuova.o && q.c===nuova.c && q.a===nuova.a && q.b===nuova.b));
+    if(val>0) quote.push(nuova);
+    if(inScala){ inScala=false; avvisi=[]; }
+    chiudiQuota();
+    ricalcola();
+    const compilate= val>0 ? compilaDaQuote() : [];
+    aggiorna();
+    const tutte=regions.length && regions.every(x=>misurato(x.data));
+    if(val>0 && tutte){ setTimeout(mettiInScala, 300); return; }
+    toast(val>0 ? (compilate.length ? `Misura salvata · ${compilate.join(', ')}: misure compilate` : 'Misura del muro salvata') : 'Misura tolta');
+  }
+  $('quotaForm').addEventListener('submit', e=>{ e.preventDefault(); const v=num(qVal.value); if(!v){ toast('Scrivi la lunghezza in metri'); return; } salvaQuota(v); });
+  $('qDel').addEventListener('click', ()=>salvaQuota(0));
+  $('qClose').addEventListener('click', chiudiQuota);
+  $('qCancel').addEventListener('click', chiudiQuota);
+  quotaModal.addEventListener('click', e=>{ if(e.target===quotaModal) chiudiQuota(); });
+
   function tocco(p){
     const wp=toWorld(p);
     const fi=infissoVicino(wp, 16); if(fi>=0){ apriInfisso(fi); return; }
@@ -1459,6 +1549,7 @@ const Pianta=(function(){
     chiudiNomi();
     if(!modal.hidden) chiudiModal();
     if(!infModal.hidden) chiudiInfisso();
+    if(!quotaModal.hidden) chiudiQuota();
     if(vista3D()) chiudi3D();
     esporta();
     aperto=false; ov.hidden=true; document.body.style.overflow='';

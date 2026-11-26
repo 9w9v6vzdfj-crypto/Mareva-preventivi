@@ -348,5 +348,26 @@ try {
   check('Usa come modello (cliente nuovo) ed eliminazione dei vecchi', ok, JSON.stringify({ r, dopo }));
 } catch (e) { check('Usa come modello (cliente nuovo) ed eliminazione dei vecchi', false, e.message); }
 
+// 17) Misure dei muri: da sole bastano per la messa in scala, finiscono nella pianta del PDF.
+try {
+  const sb = loadApp({});
+  boot(sb);
+  const C = 12, k = 4, P = (x, y) => ({ x: x * k * C, y: y * k * C });
+  const seg = (a, b, c, d) => { const p = P(a, b), q = P(c, d); return { x1: Math.min(p.x, q.x), y1: Math.min(p.y, q.y), x2: Math.max(p.x, q.x), y2: Math.max(p.y, q.y) }; };
+  const d = JSON.parse(JSON.stringify(DOC));
+  d.via = 'disegno'; d.locali = [];
+  d.pianta = { walls: [seg(0,0,6,0), seg(0,8,6,8), seg(0,0,0,8), seg(6,0,6,8)], rooms: [], infissi: [],
+               quote: [{ o: 'H', c: 0, a: 0, b: 6 * k * C, val: 4.5 }, { o: 'V', c: 0, a: 0, b: 8 * k * C, val: 3 }] };
+  run(sb, 'doc=normalizzaDoc(' + JSON.stringify(d) + '); Pianta.aggiornaDoc(doc);');
+  const esito = JSON.parse(run(sb, 'JSON.stringify(Pianta.scala(doc))'));
+  const st = JSON.parse(run(sb, 'JSON.stringify(doc.pianta.anteprima.stanze.map(s=>[s.w,s.h]))'));
+  const q = JSON.parse(run(sb, 'JSON.stringify(doc.pianta.anteprima.quote.map(x=>x.txt))'));
+  const PPM = C * 20;
+  const svg = run(sb, "svgPianta(doc,'pdf')");
+  const ok = esito.esito === 'ok' && Math.abs(st[0][0] / PPM - 4.5) < .06 && Math.abs(st[0][1] / PPM - 3) < .06
+    && q.join() === '4,50 m,3,00 m' && svg.includes('4,50 m');
+  check('Misure dei muri: messa in scala e pianta del PDF', ok, JSON.stringify({ esito, st, q }));
+} catch (e) { check('Misure dei muri: messa in scala e pianta del PDF', false, e.message); }
+
 console.log('\n' + (fail === 0 ? `🟢 TUTTO VERDE — ${pass} test superati` : `🔴 ${fail} test FALLITI (${pass} superati)`));
 process.exit(fail === 0 ? 0 : 1);
