@@ -29,7 +29,8 @@ pratiche…). Nella scheda del locale:
 Si può partire **disegnando la pianta col dito** (`pianta.js`, foglio a tutto
 schermo): le linee storte vengono raddrizzate e agganciate, ogni stanza chiusa
 diventa un locale del preventivo; si tocca una stanza per nome e misure, un
-muro per porte e finestre (tolte dalle pareti di entrambi i lati; entrano nei
+muro per la sua misura (che aiuta la messa in scala e compila da sola le
+misure delle stanze rettangolari), per porte e finestre (tolte dalle pareti di entrambi i lati; entrano nei
 lavori solo se gli si dà un prezzo). Quando tutte le stanze hanno le misure la
 pianta **si mette in scala da sola** (minimi quadrati sulle linee della
 pianta). C'è anche la vista 3D (Three.js da CDN, caricato solo se serve). La

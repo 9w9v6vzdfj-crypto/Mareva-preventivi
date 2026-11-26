@@ -232,6 +232,11 @@ function svgPianta(d, fase){
   });
   out+=`<path d="${a.muri.map(m=>`M${m[0]} ${m[1]}L${m[2]} ${m[3]}`).join('')}" stroke="#111827" stroke-width="${(sw*2.2).toFixed(2)}" stroke-linecap="round" fill="none"/>`;
   if(!pdf && (a.vani||[]).length) out+=`<path d="${a.vani.map(m=>`M${m[0]} ${m[1]}L${m[2]} ${m[3]}`).join('')}" stroke="#2563EB" stroke-width="${sw.toFixed(2)}" stroke-dasharray="${(sw*3).toFixed(1)} ${(sw*2.5).toFixed(1)}" fill="none"/>`;
+  (a.quote||[]).forEach(q=>{
+    const fq=(fs0*.8).toFixed(1), off=sw*3;
+    out+= q.o==='H' ? `<text x="${q.x}" y="${q.y-off}" font-size="${fq}" font-weight="700" text-anchor="middle" fill="#2563EB" stroke="#fff" stroke-width="${(sw*1.4).toFixed(2)}" paint-order="stroke" font-family="-apple-system,Arial,sans-serif">${esc(q.txt)}</text>`
+                    : `<text x="${q.x-off}" y="${q.y}" font-size="${fq}" font-weight="700" text-anchor="middle" fill="#2563EB" stroke="#fff" stroke-width="${(sw*1.4).toFixed(2)}" paint-order="stroke" font-family="-apple-system,Arial,sans-serif" transform="rotate(-90 ${q.x-off} ${q.y})">${esc(q.txt)}</text>`;
+  });
   (a.inf||[]).forEach(f=>{
     const h=f.half, hor=f.o==='H';
     const A= hor?[f.x-h,f.y]:[f.x,f.y-h], B= hor?[f.x+h,f.y]:[f.x,f.y+h];
