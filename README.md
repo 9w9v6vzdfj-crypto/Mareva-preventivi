@@ -33,7 +33,9 @@ muro per la sua misura (che aiuta la messa in scala e compila da sola le
 misure delle stanze rettangolari), per porte e finestre (tolte dalle pareti di entrambi i lati; entrano nei
 lavori solo se gli si dà un prezzo). Quando tutte le stanze hanno le misure la
 pianta **si mette in scala da sola** (minimi quadrati sulle linee della
-pianta). C'è anche la vista 3D (Three.js da CDN, caricato solo se serve). La
+pianta). Con un misuratore laser Bluetooth in "modalità tastiera" (HID), da ⋯ Altro →
+"Misure col laser": si tocca un muro e la misura del laser si scrive e si
+salva da sola (Invio/Tab del laser, o raffica di caratteri < 0,2 s). C'è anche la vista 3D (Three.js da CDN, caricato solo se serve). La
 pianta 2D compare nei passi Misure e Lavori e in testa al PDF.
 
 La pianta si può aggiungere dopo (le stanze si collegano ai locali già

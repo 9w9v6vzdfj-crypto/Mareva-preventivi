@@ -974,5 +974,12 @@ function wzInit(){
   root.addEventListener('keydown', wzKeydown);
   if(sh){ sh.addEventListener('click', wzSheetClick); sh.addEventListener('input', wzSheetInput); sh.addEventListener('change', wzSheetChange); }
   if(bg) bg.addEventListener('click', e=>{ if(e.target===bg){ if(_wzListino) wzSheetClick({target:{closest:()=>({dataset:{sh:'close-listino'}})}}); else wzChiudiScheda(); } });
+  // scheda misure: Invio (anche dal laser) passa alla casella dopo, poi salva
+  if(sh) sh.addEventListener('keydown', e=>{
+    if(e.key!=='Enter' || !e.target.id) return;
+    const dopo={mL:'mW', mW:'mH', sL:'sW', sW:'sH'}[e.target.id];
+    if(dopo){ e.preventDefault(); const n=wzEl(dopo); if(n){ n.focus(); n.select&&n.select(); } }
+    else if(e.target.id==='mH'){ e.preventDefault(); const b=document.querySelector('[data-sh="salva-mis"]'); if(b) b.click(); }
+  });
   document.addEventListener('keydown', e=>{ if(e.key==='Escape' && bg && bg.style.display==='flex'){ if(_wzListino) wzSalvaListino(); else wzChiudiScheda(); } });
 }

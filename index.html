@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Facile Preventivo">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=43">
+<link rel="stylesheet" href="style.css?v=44">
 </head>
 <body>
 <!-- ═══ SCHERMATA DI ACCESSO (cancello: l'app sta sotto, coperta finché non entri) ═══ -->
@@ -248,6 +248,7 @@
   <button class="pz-mi" id="mi3d" type="button">Guarda in 3D</button>
   <button class="pz-mi" id="miFit" type="button">Centra il disegno</button>
   <button class="pz-mi" id="miScala" type="button">Metti in scala ora</button>
+  <button class="pz-mi" id="miLaser" type="button">Misure col laser (Bluetooth)</button>
   <button class="pz-mi" id="miAperture" type="button">Vani porta: dividono i locali ✓</button>
   <button class="pz-mi" id="miHelp" type="button">Come si usa</button>
   <button class="pz-mi pz-warn" id="miClear" type="button">Cancella tutto</button>
@@ -320,6 +321,7 @@
     <label class="pz-f"><span>Lunghezza m</span><input id="qVal" inputmode="decimal" autocomplete="off" placeholder="3,40"></label>
     <p class="pz-scalanote" id="qInfo">—</p>
     <div class="pz-actions">
+      <button type="button" class="pz-btn" id="qAltro" hidden>Porta, finestra…</button>
       <button type="button" class="pz-btn pz-del" id="qDel" hidden>Togli misura</button>
       <button type="button" class="pz-btn" id="qCancel">Annulla</button>
       <button type="submit" class="pz-btn pz-primary">Salva</button>
@@ -361,6 +363,7 @@
       <li><b>2 dita</b><span>Spostano il foglio e fanno lo zoom. Al computer: rotellina e Maiusc + trascina.</span></li>
       <li><b>↶ ↷</b><span>Annulla e Ripeti, sempre in basso: prova senza paura.</span></li>
       <li><b>In scala</b><span>Quando tutte le stanze hanno le misure, la pianta si mette in scala da sola.</span></li>
+      <li><b>Laser</b><span>Con un misuratore laser Bluetooth in "modalità tastiera" (HID): da ⋯ Altro accendi "Misure col laser", tocca un muro e premi il pulsante del laser. La misura si scrive e si salva da sola.</span></li>
       <li><b>⋯ Altro</b><span>Vista 3D, centra il disegno, cancella tutto.</span></li>
       <li><b>✓ Fine</b><span>Torni al preventivo: ogni stanza è già un locale, con le sue misure.</span></li>
     </ul>
@@ -395,8 +398,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="app.js?v=43"></script>
-<script src="preventivo.js?v=43"></script>
-<script src="pianta.js?v=43"></script>
+<script src="app.js?v=44"></script>
+<script src="preventivo.js?v=44"></script>
+<script src="pianta.js?v=44"></script>
 </body>
 </html>
