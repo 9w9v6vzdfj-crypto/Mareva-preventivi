@@ -1061,6 +1061,9 @@ const Pianta=(function(){
     out.per.textContent=f2(c.per)+' m';
   }
   [fL,fW,fH].forEach(el=>el.addEventListener('input', aggiornaRisultati));
+  // Invio (anche dal laser) passa da lunghezza a larghezza ad altezza, poi salva
+  fL.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key==='Tab'){ e.preventDefault(); fW.focus(); fW.select(); } });
+  fW.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key==='Tab'){ e.preventDefault(); fH.focus(); fH.select(); } });
   function apriModal(ri){
     const r=regions[ri]; if(!r) return;
     selRegion=ri; requestDraw();
@@ -1398,15 +1401,54 @@ const Pianta=(function(){
   /* ── finestra "Misura del muro" ── */
   const quotaModal=$('quotaModal'), qVal=$('qVal');
   let quotaMuro=null;
+  /* ── MISURE COL LASER ──
+     Laser con Bluetooth in "modalità tastiera" (HID): la misura arriva come se
+     fosse digitata. Con la modalità accesa, il tocco su un muro apre subito la
+     casella; la misura si salva da sola quando arriva (Invio/Tab del laser, o
+     una raffica di caratteri troppo veloce per essere scritta a mano). */
+  let modoLaser=false; try{ modoLaser=localStorage.getItem('mv_laser')==='1'; }catch(_){}
+  const miLaser=$('miLaser');
+  const etichettaLaser=()=>{ miLaser.textContent= modoLaser ? 'Misure col laser: attive ✓' : 'Misure col laser (Bluetooth)'; };
+  etichettaLaser();
+  miLaser.addEventListener('click', ()=>{
+    modoLaser=!modoLaser; try{ localStorage.setItem('mv_laser', modoLaser?'1':'0'); }catch(_){}
+    etichettaLaser(); chiudiMenu();
+    toast(modoLaser ? 'Laser: tocca un muro e premi il pulsante del laser' : 'Misure col laser spente', 3500);
+  });
+  let rafficaT=null, rafficaInizio=0, rafficaFine=0;
+  qVal.addEventListener('input', ()=>{
+    const ora=performance.now();
+    if(!rafficaInizio || ora-rafficaFine>400) rafficaInizio=ora;
+    rafficaFine=ora;
+    clearTimeout(rafficaT);
+    if(!modoLaser) return;
+    rafficaT=setTimeout(()=>{
+      // caratteri arrivati tutti insieme (< 0,2 s): è il laser, non un dito
+      if(!quotaModal.hidden && rafficaFine-rafficaInizio<200 && num(qVal.value)>0) inviaQuota();
+    }, 350);
+  });
+  qVal.addEventListener('keydown', e=>{ if(e.key==='Tab'){ e.preventDefault(); inviaQuota(); } });
+  const inviaQuota=()=>{ const f=$('quotaForm'); if(f.requestSubmit) f.requestSubmit(); else f.dispatchEvent(new Event('submit',{cancelable:true})); };
+  $('qAltro').addEventListener('click', ()=>{
+    const i=walls.findIndex(w=>quotaMuro && w.x1===quotaMuro.x1 && w.y1===quotaMuro.y1 && w.x2===quotaMuro.x2 && w.y2===quotaMuro.y2);
+    chiudiQuota(); if(i<0) return;
+    const w=walls[i], m={x:(w.x1+w.x2)/2, y:(w.y1+w.y2)/2};
+    apriPop(i, toScreen(m), m);
+  });
+
   function apriQuota(i){
     const w=walls[i]; if(!w) return;
     quotaMuro=Object.assign({}, w); selWall=i; requestDraw();
     const q=quotaDi(w), hor=w.y1===w.y2;
     qVal.value= q ? fmtIn(q.val) : '';
-    $('qInfo').textContent= inScala && !q ? `Nel disegno: ${f2((hor?w.x2-w.x1:w.y2-w.y1)/PPM)} m` : 'Lunghezza del muro in metri, da spigolo a spigolo.';
+    $('qInfo').textContent= modoLaser ? 'Punta il laser e premi il pulsante: la misura arriva qui e si salva da sola.'
+      : (inScala && !q ? `Nel disegno: ${f2((hor?w.x2-w.x1:w.y2-w.y1)/PPM)} m` : 'Lunghezza del muro in metri, da spigolo a spigolo.');
     $('qDel').hidden=!q; $('qInfo').classList.remove('pz-err');
+    $('qAltro').hidden=!modoLaser;
+    rafficaInizio=0; clearTimeout(rafficaT);
     quotaModal.hidden=false;
-    setTimeout(()=>{ try{ qVal.focus(); qVal.select(); }catch(_){} },30);
+    // focus subito, dentro il tocco: su iPhone è l'unico modo per avere la casella pronta
+    try{ qVal.focus(); qVal.select(); }catch(_){}
   }
   function chiudiQuota(){ quotaModal.hidden=true; quotaMuro=null; selWall=-1; requestDraw(); }
   function salvaQuota(val){
@@ -1422,7 +1464,7 @@ const Pianta=(function(){
     aggiorna();
     const tutte=regions.length && regions.every(x=>misurato(x.data));
     if(val>0 && tutte){ setTimeout(mettiInScala, 300); return; }
-    toast(val>0 ? (compilate.length ? `Misura salvata · ${compilate.join(', ')}: misure compilate` : 'Misura del muro salvata') : 'Misura tolta');
+    toast(val>0 ? (compilate.length ? `${f2(val)} m · ${compilate.join(', ')}: misure compilate` : (modoLaser ? `${f2(val)} m · tocca il prossimo muro` : 'Misura del muro salvata')) : 'Misura tolta');
   }
   $('quotaForm').addEventListener('submit', e=>{
     e.preventDefault();
@@ -1444,7 +1486,7 @@ const Pianta=(function(){
   function tocco(p){
     const wp=toWorld(p);
     const fi=infissoVicino(wp, 16); if(fi>=0){ apriInfisso(fi); return; }
-    const mi=muroVicino(wp, 16);    if(mi>=0){ apriPop(mi, p, wp); return; }
+    const mi=muroVicino(wp, 16);    if(mi>=0){ if(modoLaser) apriQuota(mi); else apriPop(mi, p, wp); return; }
     const ri=regionAt(wp);
     if(ri>=0){ apriModal(ri); return; }
     if(walls.length) toast('Tocca una stanza colorata o un muro');
